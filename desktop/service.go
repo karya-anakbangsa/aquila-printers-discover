@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/RSISA-Semarang/rsisa-print-server/internal/printserver"
@@ -121,11 +122,19 @@ func (c *ServiceController) Start() error {
 	go func() {
 		defer close(done)
 		if err := server.Listen(cfg.Listen); err != nil {
-			c.fail(fmt.Errorf("layanan berhenti: %w", err))
+			c.fail(listenError(err, cfg.Listen))
 		}
 	}()
 	go c.watchHealth(ctx, done, cfg.Listen)
 	return nil
+}
+
+func listenError(err error, listen string) error {
+	// Windows mengembalikan WSAEADDRINUSE (10048), bukan syscall.EADDRINUSE.
+	if errors.Is(err, syscall.EADDRINUSE) || errors.Is(err, syscall.Errno(10048)) {
+		return fmt.Errorf("alamat %s sedang dipakai proses lain. Tutup proses tersebut atau ubah port di Pengaturan > Alamat Dengarkan; sesuaikan juga URL pada klien: %w", listen, err)
+	}
+	return fmt.Errorf("layanan berhenti: %w", err)
 }
 
 // watchHealth memantau /health sampai layanan berhenti atau dimatikan.

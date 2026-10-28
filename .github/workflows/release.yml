@@ -2,7 +2,7 @@
 # ke halaman GitHub Releases saat sebuah tag v* didorong.
 #
 # Alur:
-#   git tag v1.0.2 && git push origin v1.0.2
+#   git tag v1.0.3 && git push origin v1.0.3
 #   → build-macos  : Aquila-macOS-universal.dmg + Aquila-macOS-universal.pkg
 #   → build-windows: Aquila-windows-amd64-installer.exe (NSIS) + Aquila-windows-amd64.exe
 #   → build-linux  : aquila_<versi>_amd64.deb + aquila-<versi>-1.x86_64.rpm + Aquila-linux-amd64.tar.gz

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,7 +14,7 @@ import (
 	"github.com/RSISA-Semarang/rsisa-print-server/internal/printserver"
 )
 
-const appVersion = "1.0.2"
+const appVersion = "1.0.3"
 
 // AppSettings adalah preferensi aplikasi desktop (terpisah dari
 // print-server.json agar file konfigurasi print server tetap bersih).
@@ -28,7 +29,7 @@ type AppSettings struct {
 func DefaultSettings() AppSettings {
 	return AppSettings{
 		StartServiceOnLaunch: true,
-		OpenWindowOnLaunch:   false,
+		OpenWindowOnLaunch:   runtime.GOOS == "windows",
 		HideWindowOnClose:    true,
 		NotifyOnError:        true,
 		ConfirmQuit:          true,

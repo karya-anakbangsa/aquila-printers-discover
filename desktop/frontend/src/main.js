@@ -115,6 +115,14 @@ function renderStatus() {
   const cls = statusClass(st);
   const label = statusLabel(st);
 
+  const serviceError = $("#service-error");
+  if (serviceError) {
+    serviceError.textContent = st?.status === "error"
+      ? st.last_error || "Layanan gagal dimulai."
+      : "";
+    serviceError.className = `banner${st?.status === "error" ? " show err" : ""}`;
+  }
+
   const pillDot = $("#pill-dot");
   const pillText = $("#pill-text");
   if (pillDot && pillText) {
@@ -603,6 +611,7 @@ function renderMainShell() {
           <div class="kv"><span class="k">Aktif selama</span><span class="v" id="bd-uptime">—</span></div>
           <div class="kv"><span class="k">Printer terdeteksi</span><span class="v" id="bd-printers">Memuat…</span></div>
           <div class="kv"><span class="k">File konfigurasi</span><span class="v" id="bd-path">…</span></div>
+          <div class="banner" id="service-error" role="alert"></div>
         </div>
         <div class="card">
           <h2>Kendali</h2>

@@ -25,7 +25,7 @@ async function boot(overrides = {}) {
   };
   const config = {
     path: "/config/print-server.json", listen_host: "127.0.0.1", listen_port: 17891,
-    version: "1.0.2", json: "{}", created: false,
+    version: "1.0.3", json: "{}", created: false,
     origins: [{ origin: "https://existing.example.test", scheme: "https",
       host: "existing.example.test", port: 443, type: "subdomain" }],
   };
@@ -92,4 +92,11 @@ test("konfigurasi gagal dibaca tidak dianggap daftar kosong", async () => {
   assert.match(node("#origin-list").textContent, /belum berhasil dimuat/);
   assert.equal(node("#btn-origin-save").disabled, true);
   assert.equal(node("#origin-banner").textContent, "file tidak bisa dibaca");
+});
+
+test("galat layanan tampil pada panel", async () => {
+  const { context, node } = await boot();
+  vm.runInContext('state.service = { status: "error", last_error: "port sedang dipakai" }; renderStatus()', context);
+  assert.equal(node("#service-error").textContent, "port sedang dipakai");
+  assert.match(node("#service-error").className, /show err/);
 });

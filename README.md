@@ -27,6 +27,8 @@ Aquila adalah aplikasi desktop dengan baki sistem (system tray) dan panel kendal
 3. Buka tab **Alamat Diizinkan** dan ganti origin contoh dengan alamat aplikasi farmasi. Domain, subdomain, dan host dengan port khusus (misal `http://192.168.10.25:8080`) didukung.
 4. Layanan print server dimulai otomatis saat aplikasi dibuka (bisa diubah di tab **Pengaturan**).
 
+Jika muncul pesan bahwa `127.0.0.1:17891` sedang dipakai, tutup Aquila lain yang masih berjalan. Jika port dipakai aplikasi lain, ubah port di **Pengaturan → Alamat Dengarkan** dan sesuaikan URL print server pada aplikasi farmasi. Aquila tidak menghentikan aplikasi lain atau mengganti port secara otomatis.
+
 ### Baki sistem
 
 - **Klik kiri** ikon baki: popup ringkas berisi status layanan, tombol mulai/hentikan, dan pintasan ke panel.
@@ -85,8 +87,8 @@ Untuk uji lokal macOS, salin hasil ke folder `output/` di root repo (diabaikan G
 
 ```sh
 mkdir -p ../output
-ditto bin/aquila.app ../output/aquila-1.0.2-testing.app
-cp bin/aquila.dmg ../output/aquila-1.0.2-testing.dmg
+ditto bin/aquila.app ../output/aquila-1.0.3-testing.app
+cp bin/aquila.dmg ../output/aquila-1.0.3-testing.dmg
 ```
 
 ### Uninstall Aquila
@@ -129,9 +131,9 @@ git remote add origin git@github.com:karya-anakbangsa/aquila-printers-discover.g
 git branch -M main
 git push -u origin main
 
-# 4. Buat dan dorong tag versi (ganti v1.0.2 sesuai rilis)
-git tag v1.0.2
-git push origin v1.0.2
+# 4. Buat dan dorong tag versi (ganti v1.0.3 sesuai rilis)
+git tag v1.0.3
+git push origin v1.0.3
 
 # 5. Tunggu Actions selesai → halaman Releases otomatis terisi semua installer
 ```

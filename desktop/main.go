@@ -2,7 +2,7 @@ package main
 
 import (
 	"embed"
-	"log"
+	"sync/atomic"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -21,20 +21,31 @@ func init() {
 }
 
 func main() {
+	defer startupRecover()
 	paths, err := ResolvePaths()
 	if err != nil {
-		log.Fatal(err)
+		startupFatal(err)
 	}
 	core, err := NewCore(paths)
 	if err != nil {
-		log.Fatal(err)
+		startupFatal(err)
 	}
 	api := NewAquilaService(core)
 	settings := core.Settings()
+	var ready atomic.Bool
 
 	app := application.New(application.Options{
-		Name:        "Aquila",
-		Description: "Panel kendali print server lokal Aquila",
+		Name:         "Aquila",
+		Description:  "Panel kendali print server lokal Aquila",
+		ErrorHandler: startupErrorHandler(),
+		SingleInstance: &application.SingleInstanceOptions{
+			UniqueID: "com.aquila.printserver",
+			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
+				if ready.Load() {
+					api.ShowPanel()
+				}
+			},
+		},
 		Services: []application.Service{
 			application.NewService(api),
 		},
@@ -44,6 +55,9 @@ func main() {
 		Mac: application.MacOptions{
 			// Aplikasi tetap hidup di baki sistem saat jendela ditutup.
 			ApplicationShouldTerminateAfterLastWindowClosed: false,
+		},
+		Windows: application.WindowsOptions{
+			DisableQuitOnLastWindowClosed: true,
 		},
 	})
 
@@ -107,6 +121,7 @@ func main() {
 	})
 
 	app.OnShutdown(func() {
+		ready.Store(false)
 		tray.stop()
 		core.Shutdown()
 		tray.Destroy()
@@ -116,6 +131,7 @@ func main() {
 	// event/tray dispatch belum tersedia sebelum app.Run().
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
 		tray.markReady()
+		ready.Store(true)
 		if settings.StartServiceOnLaunch {
 			if err := core.StartService(); err != nil {
 				core.log("ERROR", "gagal memulai layanan: "+err.Error())
@@ -124,6 +140,9 @@ func main() {
 	})
 
 	if err := app.Run(); err != nil {
-		log.Fatal(err)
+		startupFatal(err)
+	}
+	if !quitting.Load() {
+		reportUnexpectedExit()
 	}
 }
