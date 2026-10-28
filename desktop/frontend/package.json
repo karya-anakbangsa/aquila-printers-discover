@@ -1,9 +1,10 @@
 {
   "name": "aquila-frontend",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "scripts": {
+    "test": "node --test test/*.test.js",
     "dev": "vite",
     "build:dev": "vite build --minify false --mode development",
     "build": "vite build --mode production",

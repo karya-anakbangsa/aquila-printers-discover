@@ -9,7 +9,6 @@ import {
   GetAutostart,
   GetConfig,
   GetLogs,
-  GetOrigins,
   GetPrinterCount,
   GetSettings,
   GetState,
@@ -29,6 +28,7 @@ import {
   StopService,
   TestConnection,
   ToggleService,
+  UninstallApp,
   UpdateOrigin,
 } from "./api.js";
 import "./style.css";
@@ -48,6 +48,7 @@ const state = {
   autostart: false,
   printers: -1, // -1 = belum dimuat
   editingIndex: -1,
+  savingOrigin: false,
   autoscroll: true,
   uptimeTimer: 0,
 };
@@ -62,6 +63,7 @@ const esc = (s) =>
   }[c]));
 
 const $ = (sel) => document.querySelector(sel);
+const errorMessage = (err) => err?.message || String(err);
 
 // ------------------------------------------------------------------ tampilan
 
@@ -177,6 +179,11 @@ function renderBeranda() {
 function renderOrigins() {
   const list = $("#origin-list");
   if (!list) return;
+  $("#btn-origin-save").disabled = !state.config || state.savingOrigin;
+  if (!state.config) {
+    list.innerHTML = '<p class="muted">Memuat alamat dari konfigurasi…</p>';
+    return;
+  }
   if (state.origins.length === 0) {
     list.innerHTML =
       '<p class="muted">Belum ada alamat yang diizinkan. Tambahkan alamat aplikasi farmasi Anda.</p>';
@@ -299,6 +306,7 @@ async function withBusy(button, fn) {
   } catch (err) {
     console.error(err);
   } finally {
+    if (button) button.disabled = false;
     renderStatus();
   }
 }
@@ -323,6 +331,9 @@ async function doTestConnection() {
 }
 
 async function doOriginSave() {
+  if (!state.config || state.savingOrigin) return;
+  state.savingOrigin = true;
+  $("#btn-origin-save").disabled = true;
   const scheme = $("#origin-scheme").value;
   const host = $("#origin-host").value.trim();
   const port = $("#origin-port").value.trim();
@@ -334,11 +345,14 @@ async function doOriginSave() {
       await AddOrigin(scheme, host, port);
     }
     resetOriginForm();
-    state.origins = await GetOrigins();
-    renderOrigins();
+    await reloadConfigData();
     showBanner("#origin-banner", "Alamat disimpan.", true);
   } catch (err) {
-    showBanner("#origin-banner", String(err), false);
+    await reloadConfigData().catch(() => {});
+    showBanner("#origin-banner", errorMessage(err), false);
+  } finally {
+    state.savingOrigin = false;
+    renderOrigins();
   }
 }
 
@@ -370,9 +384,8 @@ async function doOriginRemove(index) {
   hideBanner("#origin-banner");
   try {
     await RemoveOrigin(index);
-    if (state.editingIndex === index) resetOriginForm();
-    state.origins = await GetOrigins();
-    renderOrigins();
+    resetOriginForm();
+    await reloadConfigData();
   } catch (err) {
     showBanner("#origin-banner", String(err), false);
   }
@@ -453,8 +466,17 @@ function bindEvents() {
       case "open-folder":
         withBusy(btn, () => OpenConfigFolder());
         break;
-      case "origin-save":
-        doOriginSave();
+      case "refresh-origins":
+        withBusy(btn, async () => {
+          try {
+            await ReloadConfig();
+            resetOriginForm();
+            await reloadConfigData();
+            hideBanner("#origin-banner");
+          } catch (err) {
+            showBanner("#origin-banner", errorMessage(err), false);
+          }
+        });
         break;
       case "origin-cancel":
         resetOriginForm();
@@ -508,6 +530,15 @@ function bindEvents() {
       case "quit":
         QuitApp();
         break;
+      case "uninstall":
+        withBusy(btn, async () => {
+          try {
+            await UninstallApp();
+          } catch (err) {
+            showBanner("#uninstall-banner", errorMessage(err), false);
+          }
+        });
+        break;
     }
   });
 
@@ -542,8 +573,7 @@ function bindEvents() {
 
 async function reloadConfigData() {
   state.config = await GetConfig();
-  state.origins = await GetOrigins();
-  state.service = await GetState();
+  state.origins = state.config.origins || [];
   renderAll();
 }
 
@@ -552,7 +582,7 @@ async function reloadConfigData() {
 function renderMainShell() {
   $("#app").innerHTML = `
     <div class="topbar">
-      <div class="logo">✦</div>
+      <div class="logo" aria-hidden="true"><img src="/aquila-icon.png" alt=""></div>
       <h1>Aquila</h1>
       <div class="pill"><span class="dot" id="pill-dot"></span><span id="pill-text">…</span></div>
     </div>
@@ -561,6 +591,7 @@ function renderMainShell() {
       <button data-tab="origin">Alamat Diizinkan</button>
       <button data-tab="settings">Pengaturan</button>
       <button data-tab="log">Log</button>
+      <button data-tab="about">Tentang Aquila</button>
     </div>
     <div class="content">
       <div class="tab-pane active" id="pane-beranda">
@@ -598,6 +629,11 @@ function renderMainShell() {
 
       <div class="tab-pane" id="pane-origin">
         <div class="card">
+          <div class="section-heading"><h2>Daftar Alamat</h2><button data-action="refresh-origins">Muat Ulang</button></div>
+          <p class="muted" id="origin-summary"></p>
+          <div id="origin-list" style="margin-top:10px"></div>
+        </div>
+        <div class="card">
           <h2 id="origin-form-title">Tambah Alamat Diizinkan</h2>
           <form id="form-origin">
             <div class="row grow">
@@ -609,16 +645,11 @@ function renderMainShell() {
               <input id="origin-port" placeholder="port (opsional)" inputmode="numeric" style="width:120px" aria-label="Port" />
             </div>
             <div class="row" style="margin-top:10px">
-              <button type="submit" class="primary" id="btn-origin-save" data-action="origin-save">Tambah</button>
+              <button type="submit" class="primary" id="btn-origin-save" disabled>Tambah</button>
               <button type="button" id="btn-origin-cancel" data-action="origin-cancel" style="display:none">Batal</button>
             </div>
           </form>
           <div class="banner" id="origin-banner" style="margin-top:10px"></div>
-        </div>
-        <div class="card">
-          <h2>Daftar Alamat</h2>
-          <p class="muted" id="origin-summary"></p>
-          <div id="origin-list" style="margin-top:10px"></div>
         </div>
         <div class="card">
           <h2>Catatan</h2>
@@ -705,11 +736,25 @@ function renderMainShell() {
           <pre class="log-view" id="cfg-json" style="min-height:110px;max-height:200px;margin-top:8px"></pre>
         </div>
         <div class="card">
-          <h2>Tentang</h2>
-          <div class="kv"><span class="k">Aplikasi</span><span class="v">Aquila Print Server</span></div>
-          <div class="kv"><span class="k">Versi</span><span class="v" id="cfg-version">…</span></div>
-          <div class="kv"><span class="k">Author</span><span class="v">CV ANAK BANGSA</span></div>
-          <div class="kv"><span class="k">Alamat</span><span class="v">JL. KI JAGAPATI NO. 22 RT. 02 RW. 01<br>KEL. KRANDEGAN, KEC. / KAB. BANJARNEGARA</span></div>
+          <h2>Uninstall Aquila</h2>
+          <p class="muted">Hentikan layanan dan hapus aplikasi dari komputer ini. Konfigurasi serta daftar alamat tetap disimpan agar dapat dipakai saat instal ulang.</p>
+          <button class="danger" data-action="uninstall" style="margin-top:12px">Uninstall Aquila…</button>
+          <div class="banner" id="uninstall-banner" role="status" style="margin-top:10px"></div>
+        </div>
+      </div>
+
+      <div class="tab-pane" id="pane-about">
+        <div class="card about-card">
+          <div class="logo about-logo" aria-hidden="true"><img src="/aquila-icon.png" alt=""></div>
+          <h2>AQUILA</h2>
+          <p class="about-subtitle">Print Server</p>
+          <p class="about-version">Versi <span id="cfg-version">…</span></p>
+          <div class="about-author">
+            <p class="muted">Dikembangkan oleh</p>
+            <p class="about-company">CV ANAK BANGSA</p>
+            <address>Jl. Ki Jagapati No. 22, RT. 02 RW. 01<br>Kel. Krandegan, Kec. / Kab. Banjarnegara</address>
+          </div>
+          <p class="about-copyright">© 2026 CV ANAK BANGSA.<br>Seluruh hak cipta dilindungi.</p>
         </div>
       </div>
 
@@ -762,6 +807,7 @@ async function init() {
     renderMainShell();
   }
   bindEvents();
+  renderOrigins();
 
   // Event dari Go: hanya perbarui bagian yang berubah, tanpa polling.
   Events.On(AquilaState, (ev) => {
@@ -772,21 +818,17 @@ async function init() {
     appendLog(ev.data);
   });
 
-  try {
-    const [svc, cfg, settings, logs] = await Promise.all([
-      GetState(),
-      GetConfig(),
-      GetSettings(),
-      GetLogs(),
-    ]);
-    state.service = svc;
-    state.config = cfg;
-    state.settings = settings;
-    state.origins = cfg.origins || [];
-    for (const entry of logs) appendLog(entry);
-  } catch (err) {
-    console.error("gagal memuat data awal", err);
-  }
+  // Konfigurasi tetap tampil meski pemuatan log atau preferensi gagal.
+  await Promise.allSettled([
+    reloadConfigData().catch((err) => {
+      const list = $("#origin-list");
+      if (list) list.textContent = "Daftar alamat belum berhasil dimuat. Klik Muat Ulang untuk mencoba lagi.";
+      showBanner("#origin-banner", errorMessage(err), false);
+    }),
+    GetState().then((svc) => { state.service = svc; renderStatus(); }),
+    GetSettings().then((settings) => { state.settings = settings; renderSettings(); }),
+    GetLogs().then((logs) => { for (const entry of logs) appendLog(entry); }),
+  ]);
 
   if (!isPopup) {
     try {

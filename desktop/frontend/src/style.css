@@ -135,16 +135,18 @@ select:focus {
 }
 
 .logo {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #1e2a5e, #4f6bd8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 17px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  overflow: hidden;
   flex: none;
+}
+
+.logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .topbar h1 {
@@ -155,12 +157,14 @@ select:focus {
 
 .tabs {
   display: flex;
+  overflow-x: auto;
   gap: 4px;
   padding: 0 20px;
   border-bottom: 1px solid var(--border);
 }
 
 .tabs button {
+  white-space: nowrap;
   border: none;
   background: none;
   border-radius: 8px 8px 0 0;
@@ -208,6 +212,71 @@ select:focus {
   font-size: 0.95rem;
   font-weight: 650;
   margin-bottom: 12px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.section-heading h2 {
+  margin: 0;
+}
+
+.about-card {
+  text-align: center;
+  padding: 36px 24px;
+  width: 100%;
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.about-logo {
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+  margin: 0 auto 16px;
+}
+
+.about-card h2 {
+  font-size: 2rem;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
+
+.about-subtitle {
+  color: var(--muted);
+  margin: 4px 0 12px;
+}
+
+.about-version {
+  font-size: 1.05rem;
+}
+
+.about-author {
+  margin: 28px 0;
+  padding: 24px 0;
+  border-block: 1px solid var(--border);
+}
+
+.about-company {
+  font-size: 1.2rem;
+  font-weight: 650;
+  margin: 4px 0 12px;
+}
+
+.about-author address {
+  font-style: normal;
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+.about-copyright {
+  color: var(--muted);
+  font-size: 0.88rem;
 }
 
 .kv {

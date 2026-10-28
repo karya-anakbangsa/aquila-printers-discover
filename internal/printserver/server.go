@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
@@ -149,7 +150,7 @@ func (s *Server) submitPDF(c *fiber.Ctx) error {
 	}
 	ctx, cancel := context.WithTimeout(c.UserContext(), 50*time.Second)
 	defer cancel()
-	ippJobID, err := utils.PrintIPPDocument(ctx, printer.URI, pdf, docType, "farmasi", route.Copies, route.Media)
+	ippJobID, err := submitPrinterPDF(ctx, printer.URI, pdf, docType, "farmasi", route.Copies, route.Media)
 	if err != nil {
 		s.logf("ERROR", "POST /print/%s gagal ke %s: %v", docType, printer.Name, err)
 		var ippErr *utils.IPPSubmissionError
@@ -299,7 +300,7 @@ func (s *Server) testLocalPrinter(c *fiber.Ctx) error {
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, "gagal membuat halaman tes: "+err.Error())
 		}
-		ippJobID, err := utils.PrintIPPDocument(ctx, uri, pdf, "Tes printer", "rsisa", 1, "")
+		ippJobID, err := submitPrinterPDF(ctx, uri, pdf, "Tes printer", "rsisa", 1, "")
 		if err != nil {
 			s.logf("ERROR", "tes printer %s gagal: %v", request.Name, err)
 			var ippErr *utils.IPPSubmissionError
@@ -308,9 +309,9 @@ func (s *Server) testLocalPrinter(c *fiber.Ctx) error {
 			}
 			return fiber.NewError(fiber.StatusBadGateway, err.Error())
 		}
-		s.logf("INFO", "halaman uji dikirim langsung ke %s (job %d)", request.Name, ippJobID)
+		s.logf("INFO", "halaman uji dikirim ke %s (job %d)", request.Name, ippJobID)
 		response := fiber.Map{
-			"message": "Halaman uji kualitas dikirim langsung ke printer. Periksa hasil cetaknya.",
+			"message": "Halaman uji kualitas dikirim ke antrean cetak. Periksa hasil cetaknya.",
 			"printer": request.Name,
 			"uri":     uri,
 			"state":   "sent",
@@ -374,27 +375,68 @@ func sendQualityTestPage(ctx context.Context, printerName string, options utils.
 		if err != nil {
 			return err
 		}
-		file, err := os.CreateTemp("", "rsisa-printer-test-*.pdf")
-		if err != nil {
-			return fmt.Errorf("buat halaman tes: %w", err)
-		}
-		path := file.Name()
-		defer os.Remove(path)
-		if _, err := file.Write(pdf); err != nil {
-			_ = file.Close()
-			return fmt.Errorf("tulis halaman tes: %w", err)
-		}
-		if err := file.Close(); err != nil {
-			return fmt.Errorf("simpan halaman tes: %w", err)
-		}
-		output, err := exec.CommandContext(ctx, "lp", "-d", printerName, "-t", "RSISA Printer Test", "-o", "job-sheets=none", path).CombinedOutput()
-		if err != nil {
-			return commandFailure("cetak halaman tes melalui CUPS", output, err)
-		}
-		return nil
+		return printPDFToCUPS(ctx, printerName, pdf, "RSISA Printer Test", 1, "")
 	default:
 		return fmt.Errorf("OS %q belum didukung", runtime.GOOS)
 	}
+}
+
+func submitPrinterPDF(ctx context.Context, uri string, pdf []byte, jobName, userName string, copies int, media string) (int, error) {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
+		if queue := localCUPSQueue(uri); queue != "" {
+			return 0, printPDFToCUPS(ctx, queue, pdf, jobName, copies, media)
+		}
+	}
+	return utils.PrintIPPDocument(ctx, uri, pdf, jobName, userName, copies, media)
+}
+
+func localCUPSQueue(uri string) string {
+	parsed, err := url.Parse(uri)
+	if err != nil || parsed.Scheme != "ipp" || parsed.Port() != "631" || (parsed.Hostname() != "127.0.0.1" && parsed.Hostname() != "::1") {
+		return ""
+	}
+	queue, ok := strings.CutPrefix(parsed.Path, "/printers/")
+	if !ok || queue == "" || strings.ContainsAny(queue, "/\x00") || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return ""
+	}
+	return queue
+}
+
+func printPDFToCUPS(ctx context.Context, printerName string, pdf []byte, jobName string, copies int, media string) error {
+	if len(pdf) < 5 || string(pdf[:5]) != "%PDF-" {
+		return errors.New("dokumen bukan file PDF yang valid")
+	}
+	if copies < 1 {
+		copies = 1
+	}
+	if copies > 20 {
+		return errors.New("jumlah salinan maksimal 20")
+	}
+	if strings.ContainsAny(media, " \t\r\n") {
+		return errors.New("ukuran kertas tidak valid")
+	}
+	file, err := os.CreateTemp("", "rsisa-print-*.pdf")
+	if err != nil {
+		return fmt.Errorf("buat dokumen cetak: %w", err)
+	}
+	path := file.Name()
+	defer os.Remove(path)
+	if _, err := file.Write(pdf); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("tulis dokumen cetak: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("simpan dokumen cetak: %w", err)
+	}
+	args := []string{"-d", printerName, "-t", jobName, "-n", strconv.Itoa(copies), "-o", "job-sheets=none"}
+	if media != "" {
+		args = append(args, "-o", "media="+media)
+	}
+	output, err := exec.CommandContext(ctx, "lp", append(args, path)...).CombinedOutput()
+	if err != nil {
+		return &utils.IPPSubmissionError{Err: commandFailure("cetak melalui antrean CUPS", output, err)}
+	}
+	return nil
 }
 
 func commandFailure(command string, output []byte, err error) error {

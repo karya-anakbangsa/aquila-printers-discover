@@ -269,6 +269,14 @@ export function ToggleService() {
 }
 
 /**
+ * UninstallApp meminta konfirmasi sebelum menghapus aplikasi.
+ * @returns {$CancellablePromise<void>}
+ */
+export function UninstallApp() {
+    return $Call.ByID(1536785223);
+}
+
+/**
  * UpdateOrigin mengubah alamat asal pada posisi index.
  * @param {number} index
  * @param {string} scheme

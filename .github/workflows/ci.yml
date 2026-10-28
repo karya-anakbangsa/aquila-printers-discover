@@ -31,6 +31,7 @@ jobs:
         run: |
           npm install
           npm run build
+          npm test
       - name: go vet
         run: go vet ./...
       - name: go test

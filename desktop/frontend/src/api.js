@@ -30,6 +30,7 @@ export {
   StopService,
   TestConnection,
   ToggleService,
+  UninstallApp,
   UpdateOrigin,
 } from "../bindings/github.com/RSISA-Semarang/rsisa-print-server/desktop/aquilaservice.js";
 

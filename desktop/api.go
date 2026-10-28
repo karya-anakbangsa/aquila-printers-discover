@@ -122,6 +122,9 @@ func (s *AquilaService) SaveSettings(settings AppSettings) error {
 	return s.core.SaveSettings(settings)
 }
 
+// UninstallApp meminta konfirmasi sebelum menghapus aplikasi.
+func (s *AquilaService) UninstallApp() error { return s.uninstallApp() }
+
 // GetAutostart melaporkan apakah aplikasi otomatis jalan saat login.
 func (s *AquilaService) GetAutostart() (bool, error) { return s.app().Autostart.IsEnabled() }
 

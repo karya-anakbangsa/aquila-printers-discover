@@ -81,6 +81,18 @@ wails3 task darwin:package:dmg # macOS: installer aquila.dmg
 
 Task packaging harus dijalankan pada host dengan OS target (NSIS butuh Windows; deb/rpm/AppImage butuh Linux). Hasil build berada di `desktop/bin/`. Untuk mengembangkan UI dengan hot reload, jalankan `npm run dev` di `desktop/frontend` sambil menjalankan `wails3 task dev`.
 
+Untuk uji lokal macOS, salin hasil ke folder `output/` di root repo (diabaikan Git):
+
+```sh
+mkdir -p ../output
+ditto bin/aquila.app ../output/aquila-1.0.2-testing.app
+cp bin/aquila.dmg ../output/aquila-1.0.2-testing.dmg
+```
+
+### Uninstall Aquila
+
+Pilih **Pengaturan → Uninstall Aquila** dan konfirmasi. macOS memindahkan aplikasi ke Trash; Windows membuka uninstaller NSIS; Linux menghapus paket deb/rpm setelah izin administrator diberikan. Uninstaller mempertahankan `print-server.json` dan `app-settings.json` agar konfigurasi bisa dipakai kembali saat instal ulang. Aplikasi versi portable perlu dihapus manual setelah keluar.
+
 ## Rilis dan distribusi installer
 
 ### Lokasi aset rilis
@@ -117,9 +129,9 @@ git remote add origin git@github.com:karya-anakbangsa/aquila-printers-discover.g
 git branch -M main
 git push -u origin main
 
-# 4. Buat dan dorong tag versi (ganti v1.0.1 sesuai rilis)
-git tag v1.0.1
-git push origin v1.0.1
+# 4. Buat dan dorong tag versi (ganti v1.0.2 sesuai rilis)
+git tag v1.0.2
+git push origin v1.0.2
 
 # 5. Tunggu Actions selesai → halaman Releases otomatis terisi semua installer
 ```
@@ -206,7 +218,7 @@ Muat dengan `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/id.rsisa.pr
 - `POST http://127.0.0.1:17891/printers/test` — JSON `{"name":"nama antrean","paper":"A4","mode":"bw"}` untuk mencetak lewat antrean OS, atau sertakan `uri` printer IPP yang mendukung PDF. Untuk CF, LABEL, atau LAINNYA, sertakan `width_mm` dan `height_mm`.
 - `POST http://127.0.0.1:17891/print/{document_type}?module_code={module}` — body PDF mentah, `Content-Type: application/pdf`.
 
-PDF tidak dikirim ke TCP 9100: beberapa printer mencetak byte `%PDF` sebagai banyak halaman karakter acak. Di macOS/Linux, pilih antrean OS yang ditemukan di halaman pengaturan (contoh `ipp://127.0.0.1:631/printers/EPSON_L5190_Series`). Alamat loopback tersebut merujuk ke PC yang sedang mencetak, bukan VPS. Antrean OS menerima PDF dan meneruskannya ke printer dalam format yang sesuai.
+PDF tidak dikirim ke TCP 9100: beberapa printer mencetak byte `%PDF` sebagai banyak halaman karakter acak. Di macOS/Linux, pilih antrean OS yang ditemukan di halaman pengaturan (contoh `ipp://127.0.0.1:631/printers/EPSON_L5190_Series`). Alamat `127.0.0.1` merujuk ke antrean CUPS di PC ini, bukan IP jaringan printer; Aquila mengirim PDF melalui utilitas `lp` ke antrean OS. CUPS meneruskan dokumen ke alamat perangkat yang dikonfigurasi pada sistem operasi.
 
 ### Pengecualian sertifikat IPPS untuk pengujian
 
