@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -43,14 +47,17 @@ type HealthResult struct {
 // pemantauan kesehatan. Seluruh goroutine pemantau berhenti saat layanan
 // distop sehingga tidak ada kebocoran memori atau goroutine.
 type ServiceController struct {
-	mu        sync.Mutex
-	status    string
-	server    *printserver.Server
-	startedAt time.Time
-	lastErr   string
-	healthOK  bool
-	cancel    context.CancelFunc
-	done      chan struct{}
+	opMu       sync.Mutex
+	mu         sync.Mutex
+	status     string
+	server     *printserver.Server
+	startedAt  time.Time
+	lastErr    string
+	healthOK   bool
+	cancel     context.CancelFunc
+	done       chan struct{}
+	healthDone chan struct{}
+	listener   net.Listener
 
 	cfgProvider func() printserver.Config
 	logf        printserver.EventLog
@@ -99,6 +106,17 @@ func (c *ServiceController) notify() {
 
 // Start menjalankan layanan. Bila sudah berjalan, tidak ada yang terjadi.
 func (c *ServiceController) Start() error {
+	c.opMu.Lock()
+	defer c.opMu.Unlock()
+	return c.start()
+}
+
+func (c *ServiceController) start() error {
+	if c.State().Status == statusError {
+		if err := c.stop(); err != nil {
+			return err
+		}
+	}
 	c.mu.Lock()
 	if c.status == statusStarting || c.status == statusRunning {
 		c.mu.Unlock()
@@ -108,24 +126,42 @@ func (c *ServiceController) Start() error {
 	server := printserver.New(cfg, c.logf)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
+	healthDone := make(chan struct{})
 	c.server = server
 	c.cancel = cancel
 	c.done = done
+	c.healthDone = healthDone
 	c.status = statusStarting
 	c.startedAt = time.Now()
 	c.lastErr = ""
 	c.healthOK = false
+	c.mu.Unlock()
+	listener, err := net.Listen("tcp4", cfg.Listen)
+	if err != nil {
+		cancel()
+		close(done)
+		close(healthDone)
+		err = listenError(err, cfg.Listen)
+		c.fail(err)
+		return err
+	}
+	c.mu.Lock()
+	c.listener = listener
 	c.mu.Unlock()
 	c.notify()
 	c.logf("INFO", fmt.Sprintf("memulai layanan pada %s", cfg.Listen))
 
 	go func() {
 		defer close(done)
-		if err := server.Listen(cfg.Listen); err != nil {
+		defer cancel()
+		if err := server.App().Listener(listener); err != nil && ctx.Err() == nil {
 			c.fail(listenError(err, cfg.Listen))
 		}
 	}()
-	go c.watchHealth(ctx, done, cfg.Listen)
+	go func() {
+		defer close(healthDone)
+		c.watchHealth(ctx, done, cfg.Listen)
+	}()
 	return nil
 }
 
@@ -172,7 +208,13 @@ func probeHealth(client *http.Client, listen string) bool {
 	defer func() {
 		_ = response.Body.Close()
 	}()
-	return response.StatusCode == http.StatusOK
+	var health struct {
+		Status  string `json:"status"`
+		Service string `json:"service"`
+	}
+	return response.StatusCode == http.StatusOK &&
+		json.NewDecoder(io.LimitReader(response.Body, 4096)).Decode(&health) == nil &&
+		health.Status == "ok" && health.Service == "rsisa-print-server"
 }
 
 func (c *ServiceController) markHealthy() {
@@ -220,41 +262,68 @@ func (c *ServiceController) fail(err error) {
 // Stop mematikan layanan secara graceful dan menghentikan seluruh goroutine
 // pemantau.
 func (c *ServiceController) Stop() error {
+	c.opMu.Lock()
+	defer c.opMu.Unlock()
+	return c.stop()
+}
+
+func (c *ServiceController) stop() error {
 	c.mu.Lock()
 	if c.status == statusStopped {
 		c.mu.Unlock()
 		return nil
 	}
-	server := c.server
-	cancel := c.cancel
-	done := c.done
-	c.server = nil
-	c.cancel = nil
-	c.done = nil
-	c.healthOK = false
+	server, listener := c.server, c.listener
+	cancel, done, healthDone := c.cancel, c.done, c.healthDone
 	c.mu.Unlock()
 
 	if cancel != nil {
 		cancel()
 	}
-	if server != nil {
-		ctx, timeout := context.WithTimeout(context.Background(), shutdownTimeout)
-		defer timeout()
-		if err := server.Shutdown(ctx); err != nil {
-			c.logf("ERROR", fmt.Sprintf("shutdown layanan: %v", err))
+	ctx, timeout := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer timeout()
+	var shutdownErr error
+	if server != nil && listener != nil {
+		shutdownErr = server.Shutdown(ctx)
+		// Fiber mengembalikan error ini bila Stop menang lebih dulu daripada
+		// goroutine yang baru memanggil App.Listener. Listener tetap harus
+		// ditutup sendiri pada kasus tersebut.
+		if shutdownErr != nil && strings.Contains(shutdownErr.Error(), "shutdown: server is not running") {
+			shutdownErr = nil
+			_ = listener.Close()
+		}
+		// Menutup listener yang sudah ditutup oleh Fiber adalah kondisi normal
+		// saat shutdown bersamaan dengan Serve; jangan menjadikannya kegagalan
+		// restart.
+		if errors.Is(shutdownErr, net.ErrClosed) {
+			shutdownErr = nil
 		}
 	}
-	if done != nil {
+	if shutdownErr != nil {
+		c.fail(fmt.Errorf("shutdown layanan: %w", shutdownErr))
+		return shutdownErr
+	}
+	if listener != nil {
+		// Bila Fiber belum sempat mendaftarkan listener, Shutdown tidak dapat
+		// menutupnya. Close idempoten secara logis untuk tujuan lifecycle ini;
+		// error ErrClosed tidak relevan bagi caller.
+		_ = listener.Close()
+	}
+	for _, stopped := range []chan struct{}{done, healthDone} {
+		if stopped == nil {
+			continue
+		}
 		select {
-		case <-done:
-		case <-time.After(shutdownTimeout):
-			c.logf("ERROR", fmt.Sprintf("layanan tidak berhenti dalam %s", shutdownTimeout))
+		case <-stopped:
+		case <-ctx.Done():
+			c.fail(fmt.Errorf("layanan belum selesai berhenti: %w", ctx.Err()))
+			return ctx.Err()
 		}
 	}
-
 	c.mu.Lock()
-	c.status = statusStopped
-	c.lastErr = ""
+	c.server, c.listener = nil, nil
+	c.cancel, c.done, c.healthDone = nil, nil, nil
+	c.status, c.lastErr, c.healthOK = statusStopped, "", false
 	state := c.stateLocked()
 	c.mu.Unlock()
 	c.logf("INFO", "layanan dihentikan")
@@ -264,12 +333,14 @@ func (c *ServiceController) Stop() error {
 	return nil
 }
 
-// Restart mematikan lalu menjalankan ulang layanan dengan konfigurasi terbaru.
+// Restart menyelesaikan penghentian sebelum membuka listener berikutnya.
 func (c *ServiceController) Restart() error {
-	if err := c.Stop(); err != nil {
+	c.opMu.Lock()
+	defer c.opMu.Unlock()
+	if err := c.stop(); err != nil {
 		return err
 	}
-	return c.Start()
+	return c.start()
 }
 
 // UpdateConfig menerapkan konfigurasi baru ke layanan yang sedang berjalan.

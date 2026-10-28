@@ -5,6 +5,7 @@ import {
   AquilaState,
   ClearLogs,
   CopyServerAddress,
+  DiagnosePort,
   ExportConfig,
   GetAutostart,
   GetConfig,
@@ -338,6 +339,20 @@ async function doTestConnection() {
   }
 }
 
+async function doDiagnosePort(button) {
+  await withBusy(button, async () => {
+    try {
+      const result = await DiagnosePort();
+      const detail = result.in_use
+        ? `${result.message} Tutup aplikasi tersebut atau ubah port layanan.`
+        : result.message;
+      showBanner("#banner", detail, !result.in_use);
+    } catch (err) {
+      showBanner("#banner", `Pemeriksaan pemakai port gagal: ${errorMessage(err)}`, false);
+    }
+  });
+}
+
 async function doOriginSave() {
   if (!state.config || state.savingOrigin) return;
   state.savingOrigin = true;
@@ -461,6 +476,9 @@ function bindEvents() {
         break;
       case "test-connection":
         doTestConnection();
+        break;
+      case "diagnose-port":
+        doDiagnosePort(btn);
         break;
       case "copy-address":
         withBusy(btn, async () => {
@@ -620,6 +638,7 @@ function renderMainShell() {
             <button class="primary" id="btn-toggle" data-action="toggle-service">…</button>
             <button id="btn-restart" data-action="restart-service">Muat Ulang Layanan</button>
             <button id="btn-test" data-action="test-connection">Tes Koneksi</button>
+            <button id="btn-diagnose-port" data-action="diagnose-port">Cek Pemakai Port</button>
           </div>
           <div class="row">
             <button data-action="copy-address">Salin Alamat</button>

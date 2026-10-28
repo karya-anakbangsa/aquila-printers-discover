@@ -242,6 +242,64 @@ export class LogEntry {
 }
 
 /**
+ * PortOwnerResult sengaja hanya membawa nama proses. PID dan detail proses
+ * lain tidak perlu ditampilkan kepada pengguna untuk mendiagnosis konflik
+ * port, dan dapat berbeda hak akses antar-OS.
+ */
+export class PortOwnerResult {
+    /**
+     * Creates a new PortOwnerResult instance.
+     * @param {Partial<PortOwnerResult>} [$$source = {}] - The source object to create the PortOwnerResult.
+     */
+    constructor($$source = {}) {
+        if (!("port" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["port"] = 0;
+        }
+        if (!("in_use" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["in_use"] = false;
+        }
+        if (!("processes" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["processes"] = [];
+        }
+        if (!("message" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["message"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new PortOwnerResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {PortOwnerResult}
+     */
+    static createFrom($$source = {}) {
+        const $$createField2_0 = $$createType2;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("processes" in $$parsedSource) {
+            $$parsedSource["processes"] = $$createField2_0($$parsedSource["processes"]);
+        }
+        return new PortOwnerResult(/** @type {Partial<PortOwnerResult>} */($$parsedSource));
+    }
+}
+
+/**
  * ServiceState adalah keadaan layanan yang dikirim ke UI dan tray.
  */
 export class ServiceState {
@@ -302,7 +360,7 @@ export class ServiceState {
      * @returns {ServiceState}
      */
     static createFrom($$source = {}) {
-        const $$createField4_0 = $$createType2;
+        const $$createField4_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("started_at" in $$parsedSource) {
             $$parsedSource["started_at"] = $$createField4_0($$parsedSource["started_at"]);
@@ -314,4 +372,5 @@ export class ServiceState {
 // Private type creation functions
 const $$createType0 = printserver$0.OriginInfo.createFrom;
 const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $Create.Nullable($Create.DateFromTime);
+const $$createType2 = $Create.Array($Create.Any);
+const $$createType3 = $Create.Nullable($Create.DateFromTime);

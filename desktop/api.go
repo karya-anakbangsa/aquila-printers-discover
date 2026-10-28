@@ -41,6 +41,12 @@ func (s *AquilaService) RestartService() error { return s.core.RestartService() 
 // TestConnection memeriksa kesehatan print server lokal.
 func (s *AquilaService) TestConnection() HealthResult { return s.core.TestConnection() }
 
+// DiagnosePort mengembalikan nama proses yang memakai port layanan saat ini.
+// Hasil ini dipakai saat layanan gagal start karena port sedang digunakan.
+func (s *AquilaService) DiagnosePort() (PortOwnerResult, error) {
+	return DiagnosePort(s.core.currentConfig().Listen)
+}
+
 // ----------------------------------------------------------------- origin --
 
 // GetOrigins mengembalikan daftar alamat asal yang diizinkan.

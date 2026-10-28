@@ -48,6 +48,17 @@ export function CopyServerAddress() {
 }
 
 /**
+ * DiagnosePort mengembalikan nama proses yang memakai port layanan saat ini.
+ * Hasil ini dipakai saat layanan gagal start karena port sedang digunakan.
+ * @returns {$CancellablePromise<$models.PortOwnerResult>}
+ */
+export function DiagnosePort() {
+    return $Call.ByID(1162269509).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
+    }));
+}
+
+/**
  * ExportConfig membuka dialog simpan lalu menyalin konfigurasi ke sana.
  * @returns {$CancellablePromise<void>}
  */
@@ -69,7 +80,7 @@ export function GetAutostart() {
  */
 export function GetConfig() {
     return $Call.ByID(3819158040).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType0($result);
+        return $$createType1($result);
     }));
 }
 
@@ -79,7 +90,7 @@ export function GetConfig() {
  */
 export function GetLogs() {
     return $Call.ByID(248787509).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType2($result);
+        return $$createType3($result);
     }));
 }
 
@@ -89,7 +100,7 @@ export function GetLogs() {
  */
 export function GetOrigins() {
     return $Call.ByID(2000465585).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
+        return $$createType5($result);
     }));
 }
 
@@ -107,7 +118,7 @@ export function GetPrinterCount() {
  */
 export function GetSettings() {
     return $Call.ByID(293930939).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType6($result);
     }));
 }
 
@@ -117,7 +128,7 @@ export function GetSettings() {
  */
 export function GetState() {
     return $Call.ByID(2333843955).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType6($result);
+        return $$createType7($result);
     }));
 }
 
@@ -255,7 +266,7 @@ export function StopService() {
  */
 export function TestConnection() {
     return $Call.ByID(2165223494).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType8($result);
     }));
 }
 
@@ -289,11 +300,12 @@ export function UpdateOrigin(index, scheme, host, port) {
 }
 
 // Private type creation functions
-const $$createType0 = $models.ConfigView.createFrom;
-const $$createType1 = $models.LogEntry.createFrom;
-const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = printserver$0.OriginInfo.createFrom;
-const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = $models.AppSettings.createFrom;
-const $$createType6 = $models.ServiceState.createFrom;
-const $$createType7 = $models.HealthResult.createFrom;
+const $$createType0 = $models.PortOwnerResult.createFrom;
+const $$createType1 = $models.ConfigView.createFrom;
+const $$createType2 = $models.LogEntry.createFrom;
+const $$createType3 = $Create.Array($$createType2);
+const $$createType4 = printserver$0.OriginInfo.createFrom;
+const $$createType5 = $Create.Array($$createType4);
+const $$createType6 = $models.AppSettings.createFrom;
+const $$createType7 = $models.ServiceState.createFrom;
+const $$createType8 = $models.HealthResult.createFrom;

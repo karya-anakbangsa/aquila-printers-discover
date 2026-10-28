@@ -6,11 +6,11 @@ JL. KI JAGAPATI NO. 22 RT. 02 RW. 01, KEL. KRANDEGAN, KEC. / KAB. BANJARNEGARA.
 
 © 2026 CV ANAK BANGSA. Seluruh hak dilindungi.
 
-Service lokal lintas platform untuk PC farmasi. Halaman tes membaca antrean printer dari sistem operasi dan mengirim lembar uji kualitas ke printer yang dipilih. Aplikasi farmasi mengakses service lokal ini dari browser PC.
+Service lokal lintas platform untuk PC tempat aplikasi klien digunakan. Halaman tes membaca antrean printer dari sistem operasi dan mengirim lembar uji kualitas ke printer yang dipilih. Aplikasi klien mengakses service lokal ini dari browser PC.
 
 ## Alur
 
-Browser di PC membuka aplikasi farmasi dari VPS dan mengirim request ke `http://127.0.0.1:17891` pada PC yang sama. Print server lokal membaca antrean yang dikenal OS di PC tersebut. VPS tidak perlu membuka koneksi ke IP printer atau PC.
+Browser di PC membuka aplikasi klien dari VPS dan mengirim request ke `http://127.0.0.1:17891` pada PC yang sama. Print server lokal membaca antrean yang dikenal OS di PC tersebut. VPS tidak perlu membuka koneksi ke IP printer atau PC.
 
 ## Dukungan OS dan printer
 
@@ -23,11 +23,11 @@ Aquila adalah aplikasi desktop dengan baki sistem (system tray) dan panel kendal
 ### Instalasi
 
 1. Pasang aplikasi dari installer. Pada macOS, buka `aquila.dmg` lalu seret **Aquila** ke folder **Applications**.
-2. Saat pertama dijalankan, Aquila otomatis membuat `print-server.json` dengan nilai awal `listen: 127.0.0.1:17891` dan `allowed_origins: ["https://farmasi.example.test", "http://localhost:4200"]`. Tidak perlu menyalin `print-server.example.json` lagi.
-3. Buka tab **Alamat Diizinkan** dan ganti origin contoh dengan alamat aplikasi farmasi. Domain, subdomain, dan host dengan port khusus (misal `http://192.168.10.25:8080`) didukung.
+2. Saat pertama dijalankan, Aquila otomatis membuat `print-server.json` dengan nilai awal `listen: 127.0.0.1:17891` dan `allowed_origins: ["https://app.example.org", "http://localhost:4200"]`. Tidak perlu menyalin `print-server.example.json` lagi.
+3. Buka tab **Alamat Diizinkan** dan ganti origin contoh dengan alamat aplikasi klien. Domain, subdomain, dan host dengan port khusus (misal `http://192.168.10.25:8080`) didukung.
 4. Layanan print server dimulai otomatis saat aplikasi dibuka (bisa diubah di tab **Pengaturan**).
 
-Jika muncul pesan bahwa `127.0.0.1:17891` sedang dipakai, tutup Aquila lain yang masih berjalan. Jika port dipakai aplikasi lain, ubah port di **Pengaturan → Alamat Dengarkan** dan sesuaikan URL print server pada aplikasi farmasi. Aquila tidak menghentikan aplikasi lain atau mengganti port secara otomatis.
+Jika muncul pesan bahwa `127.0.0.1:17891` sedang dipakai, tutup Aquila lain yang masih berjalan. Jika port dipakai aplikasi lain, ubah port di **Pengaturan → Alamat Dengarkan** dan sesuaikan URL print server pada aplikasi klien. Aquila tidak menghentikan aplikasi lain atau mengganti port secara otomatis.
 
 ### Baki sistem
 
@@ -49,7 +49,7 @@ Folder ini berisi `print-server.json` (konfigurasi layanan, format sama dengan C
 Setelah repo `rsisa-print-server` diterbitkan, unduh binary sesuai OS dan arsitektur CPU dari halaman **Releases** repo tersebut. Belum ada tautan rilis sampai repo jarak jauh dibuat dan asetnya diunggah.
 
 1. Letakkan binary di folder khusus PC. Untuk Windows gunakan `rsisa-print-server.exe`; untuk Linux/macOS gunakan `rsisa-print-server` dan jalankan `chmod +x rsisa-print-server`.
-2. Salin `print-server.example.json` dari repo ini sebagai `print-server.json` di folder binary. Ganti `https://farmasi.example.org` dengan origin frontend VPS yang benar, misalnya `https://farmasi.rsisa.id` (tanpa path `/login`).
+2. Salin `print-server.example.json` dari repo ini sebagai `print-server.json` di folder binary. Ganti `https://app.example.org` dengan origin frontend VPS yang benar (tanpa path seperti `/login`).
 3. Pastikan printer sudah terpasang dan aktif pada OS PC. Jalankan binary dan periksa `http://127.0.0.1:17891/health`.
 4. Buka **Sistem → Printer → Tes Printer**, pilih printer, jenis kertas, dan mode, lalu tekan **Cetak halaman uji**.
 
@@ -148,15 +148,15 @@ Catatan penting:
 
 ## Konfigurasi setiap PC
 
-Salin `print-server.example.json` sebagai `print-server.json` di sebelah binary. Ganti origin contoh dengan alamat aplikasi farmasi di VPS. Isi origin saja, tanpa path; contoh `https://farmasi.rsisa.id`. Pertahankan `http://localhost:4200` hanya untuk development jika diperlukan.
+Salin `print-server.example.json` sebagai `print-server.json` di sebelah binary. Ganti origin contoh dengan alamat aplikasi klien di VPS. Isi origin saja, tanpa path; contoh `https://app.example.org`. Pertahankan `http://localhost:4200` hanya untuk development jika diperlukan.
 
-Halaman tes membaca printer dari PC. Untuk cetakan aplikasi, daftar printer dan tujuan cetak dikelola di **Sistem → Printer** pada aplikasi farmasi. Saat mencetak, browser mengambil tujuan tersebut dari API dan meneruskannya ke print server lokal; staf tidak perlu mengedit `printers` atau `routes` di JSON. Konfigurasi route lokal lama tetap didukung untuk pemanggil API manual yang belum mengirim tujuan cetak.
+Halaman tes membaca printer dari PC. Untuk cetakan aplikasi, daftar printer dan tujuan cetak dikelola di aplikasi klien. Saat mencetak, browser mengambil tujuan tersebut dari API dan meneruskannya ke print server lokal; pengguna tidak perlu mengedit `printers` atau `routes` di JSON. Konfigurasi route lokal lama tetap didukung untuk pemanggil API manual yang belum mengirim tujuan cetak.
 
-Print server hanya bind ke `127.0.0.1:17891`; jangan ubah ke alamat LAN. Setelah menjalankan service, cek `http://127.0.0.1:17891/health`. Browser mungkin meminta izin akses jaringan lokal untuk situs farmasi; izinkan untuk memakai print server PC tersebut.
+Print server hanya bind ke `127.0.0.1:17891`; jangan ubah ke alamat LAN. Setelah menjalankan service, cek `http://127.0.0.1:17891/health`. Browser mungkin meminta izin akses jaringan lokal untuk situs aplikasi klien; izinkan untuk memakai print server PC tersebut.
 
 ### Windows
 
-Letakkan `.exe` dan konfigurasi di satu folder. Jalankan `rsisa-print-server.exe`. Untuk auto-start, buat Scheduled Task dengan trigger **At log on** untuk akun pengguna farmasi dan executable tersebut sebagai program.
+Letakkan `.exe` dan konfigurasi di satu folder. Jalankan `rsisa-print-server.exe`. Untuk auto-start, buat Scheduled Task dengan trigger **At log on** untuk akun pengguna PC dan executable tersebut sebagai program.
 
 ### Linux
 
@@ -241,6 +241,6 @@ curl -X POST 'http://127.0.0.1:17891/print/etiket_obat?module_code=resep_rajal' 
 
 `202 Accepted` berarti PDF sudah diteruskan ke printer; belum memastikan kertas sudah keluar. Jika koneksi terputus setelah pengiriman dimulai, periksa printer sebelum mencoba ulang agar tidak mencetak ganda.
 
-## Hubungkan aplikasi farmasi
+## Hubungkan aplikasi klien
 
-Aplikasi memakai `VITE_PRINT_SERVER_URL`, dengan default `http://127.0.0.1:17891`. Untuk VPS, URL ini tetap alamat loopback karena request dikirim browser ke print server pada PC pengguna. Tambahkan origin VPS ke `allowed_origins` di konfigurasi print server setiap PC.
+Aplikasi klien memakai `VITE_PRINT_SERVER_URL`, dengan default `http://127.0.0.1:17891`. Untuk VPS, URL ini tetap alamat loopback karena request dikirim browser ke print server pada PC pengguna. Tambahkan origin VPS ke `allowed_origins` di konfigurasi print server setiap PC.

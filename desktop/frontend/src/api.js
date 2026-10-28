@@ -5,6 +5,7 @@ export {
   AddOrigin,
   ClearLogs,
   CopyServerAddress,
+  DiagnosePort,
   ExportConfig,
   GetAutostart,
   GetConfig,

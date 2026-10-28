@@ -12,5 +12,6 @@ export {
     ConfigView,
     HealthResult,
     LogEntry,
+    PortOwnerResult,
     ServiceState
 } from "./models.js";
