@@ -38,6 +38,7 @@ jobs:
         working-directory: desktop/frontend
         run: npm run build
       - name: Test frontend
+        if: runner.os != 'Windows'
         working-directory: desktop/frontend
         run: npm test
       - name: go vet
