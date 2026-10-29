@@ -103,6 +103,10 @@ jobs:
             $nsisPath = Join-Path ${env:ProgramFiles(x86)} 'NSIS'
             choco install nsis --yes --no-progress
           }
+          if (-not (Test-Path (Join-Path $nsisPath 'makensis.exe'))) {
+            $installed = Get-ChildItem (Join-Path $env:ChocolateyInstall 'lib\nsis') -Filter makensis.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($installed) { $nsisPath = $installed.DirectoryName }
+          }
           if (-not (Test-Path (Join-Path $nsisPath 'makensis.exe'))) { throw 'makensis.exe tidak ditemukan setelah pemasangan NSIS' }
           $nsisPath | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Build portable exe
