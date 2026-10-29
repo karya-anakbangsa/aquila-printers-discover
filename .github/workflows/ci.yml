@@ -31,12 +31,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
       # embed all:frontend/dist di desktop/main.go butuh hasil build frontend ada.
+      - name: Install frontend dependencies
+        working-directory: desktop/frontend
+        run: npm install
       - name: Build frontend
         working-directory: desktop/frontend
-        run: |
-          npm install
-          npm run build
-          npm test
+        run: npm run build
+      - name: Test frontend
+        working-directory: desktop/frontend
+        run: npm test
       - name: go vet
         run: go vet ./...
       - name: go test
