@@ -101,7 +101,12 @@ jobs:
           }
           if (-not $nsisPath) {
             $nsisPath = Join-Path ${env:ProgramFiles(x86)} 'NSIS'
-            choco install nsis --yes --no-progress
+            for ($attempt = 1; $attempt -le 3 -and -not (Test-Path (Join-Path $nsisPath 'makensis.exe')); $attempt++) {
+              $choco = (Get-Command choco.exe -ErrorAction Stop).Source
+              $install = Start-Process $choco -ArgumentList 'install nsis --yes --no-progress' -Wait -PassThru -NoNewWindow
+              Write-Host "Chocolatey NSIS install attempt $attempt exited $($install.ExitCode)"
+              Start-Sleep -Seconds 3
+            }
           }
           if (-not (Test-Path (Join-Path $nsisPath 'makensis.exe'))) {
             $installed = Get-ChildItem (Join-Path $env:ChocolateyInstall 'lib\nsis') -Filter makensis.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
