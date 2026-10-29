@@ -14,7 +14,7 @@ import (
 	"github.com/RSISA-Semarang/rsisa-print-server/internal/printserver"
 )
 
-const appVersion = "1.0.4"
+const appVersion = "1.0.5"
 
 // AppSettings adalah preferensi aplikasi desktop (terpisah dari
 // print-server.json agar file konfigurasi print server tetap bersih).

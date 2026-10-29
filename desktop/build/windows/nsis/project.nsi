@@ -106,6 +106,9 @@ SectionEnd
 Section "uninstall" 
     !insertmacro wails.setShellContext
 
+    # The app may still be running in the tray; terminate it so its server releases the port.
+    ExecWait '"$SYSDIR\taskkill.exe" /F /IM "${PRODUCT_EXECUTABLE}"'
+
     RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "aquila"
 

@@ -87,13 +87,13 @@ Untuk uji lokal macOS, salin hasil ke folder `output/` di root repo (diabaikan G
 
 ```sh
 mkdir -p ../output
-ditto bin/aquila.app ../output/aquila-1.0.4-testing.app
-cp bin/aquila.dmg ../output/aquila-1.0.4-testing.dmg
+ditto bin/aquila.app ../output/aquila-1.0.5-testing.app
+cp bin/aquila.dmg ../output/aquila-1.0.5-testing.dmg
 ```
 
 ### Uninstall Aquila
 
-Pilih **Pengaturan → Uninstall Aquila** dan konfirmasi. macOS memindahkan aplikasi ke Trash; Windows membuka uninstaller NSIS; Linux menghapus paket deb/rpm setelah izin administrator diberikan. Uninstaller mempertahankan `print-server.json` dan `app-settings.json` agar konfigurasi bisa dipakai kembali saat instal ulang. Aplikasi versi portable perlu dihapus manual setelah keluar.
+Pilih **Pengaturan → Uninstall Aquila** dan konfirmasi. macOS memindahkan aplikasi ke Trash; Windows membuka uninstaller NSIS yang menutup proses Aquila agar port server dilepas; Linux menghapus paket deb/rpm setelah izin administrator diberikan. Uninstaller mempertahankan `print-server.json` dan `app-settings.json` agar konfigurasi bisa dipakai kembali saat instal ulang. Untuk versi portable, pilih **Keluar** dari menu klik kanan ikon tray terlebih dahulu, lalu hapus file; menghapus file saat proses masih berjalan tidak menghentikan server.
 
 ## Rilis dan distribusi installer
 
@@ -131,9 +131,9 @@ git remote add origin git@github.com:karya-anakbangsa/aquila-printers-discover.g
 git branch -M main
 git push -u origin main
 
-# 4. Buat dan dorong tag versi (ganti v1.0.4 sesuai rilis)
-git tag v1.0.4
-git push origin v1.0.4
+# 4. Buat dan dorong tag versi (contoh: v1.0.5)
+git tag v1.0.5
+git push origin v1.0.5
 
 # 5. Tunggu Actions selesai → halaman Releases otomatis terisi semua installer
 ```
