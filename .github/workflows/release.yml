@@ -91,8 +91,10 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Pastikan makensis tersedia
         run: |
-          command -v makensis || choco install nsis -y
-          echo 'C:\Program Files (x86)\NSIS' >> "$GITHUB_PATH"
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
+            choco install nsis --yes --no-progress
+          }
+          'C:\Program Files (x86)\NSIS' | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Build portable exe
         working-directory: desktop
         run: wails3 task windows:build ARCH=amd64
