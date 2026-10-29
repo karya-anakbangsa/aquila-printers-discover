@@ -90,30 +90,10 @@ jobs:
           go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Pastikan makensis tersedia
+        shell: cmd
         run: |
-          $candidates = @(
-            (Join-Path $env:ProgramFiles 'NSIS'),
-            (Join-Path ${env:ProgramFiles(x86)} 'NSIS')
-          )
-          $nsisPath = $candidates | Where-Object { Test-Path (Join-Path $_ 'makensis.exe') } | Select-Object -First 1
-          if (-not $nsisPath -and (Get-Command makensis.exe -ErrorAction SilentlyContinue)) {
-            $nsisPath = Split-Path (Get-Command makensis.exe).Source
-          }
-          if (-not $nsisPath) {
-            $nsisPath = Join-Path ${env:ProgramFiles(x86)} 'NSIS'
-            for ($attempt = 1; $attempt -le 3 -and -not (Test-Path (Join-Path $nsisPath 'makensis.exe')); $attempt++) {
-              $choco = (Get-Command choco.exe -ErrorAction Stop).Source
-              $install = Start-Process $choco -ArgumentList 'install nsis --yes --no-progress' -Wait -PassThru -NoNewWindow
-              Write-Host "Chocolatey NSIS install attempt $attempt exited $($install.ExitCode)"
-              Start-Sleep -Seconds 3
-            }
-          }
-          if (-not (Test-Path (Join-Path $nsisPath 'makensis.exe'))) {
-            $installed = Get-ChildItem (Join-Path $env:ChocolateyInstall 'lib\nsis') -Filter makensis.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($installed) { $nsisPath = $installed.DirectoryName }
-          }
-          if (-not (Test-Path (Join-Path $nsisPath 'makensis.exe'))) { throw 'makensis.exe tidak ditemukan setelah pemasangan NSIS' }
-          $nsisPath | Out-File -FilePath $env:GITHUB_PATH -Append
+          choco install nsis -y --no-progress
+          echo C:\Program Files (x86)\NSIS>>%GITHUB_PATH%
       - name: Build portable exe
         working-directory: desktop
         run: wails3 task windows:build ARCH=amd64
