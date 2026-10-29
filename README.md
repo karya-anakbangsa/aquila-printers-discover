@@ -87,8 +87,8 @@ Untuk uji lokal macOS, salin hasil ke folder `output/` di root repo (diabaikan G
 
 ```sh
 mkdir -p ../output
-ditto bin/aquila.app ../output/aquila-1.0.3-testing.app
-cp bin/aquila.dmg ../output/aquila-1.0.3-testing.dmg
+ditto bin/aquila.app ../output/aquila-1.0.4-testing.app
+cp bin/aquila.dmg ../output/aquila-1.0.4-testing.dmg
 ```
 
 ### Uninstall Aquila
@@ -131,9 +131,9 @@ git remote add origin git@github.com:karya-anakbangsa/aquila-printers-discover.g
 git branch -M main
 git push -u origin main
 
-# 4. Buat dan dorong tag versi (ganti v1.0.3 sesuai rilis)
-git tag v1.0.3
-git push origin v1.0.3
+# 4. Buat dan dorong tag versi (ganti v1.0.4 sesuai rilis)
+git tag v1.0.4
+git push origin v1.0.4
 
 # 5. Tunggu Actions selesai → halaman Releases otomatis terisi semua installer
 ```
