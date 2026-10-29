@@ -91,10 +91,20 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Pastikan makensis tersedia
         run: |
-          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
+          $candidates = @(
+            (Join-Path $env:ProgramFiles 'NSIS'),
+            (Join-Path ${env:ProgramFiles(x86)} 'NSIS')
+          )
+          $nsisPath = $candidates | Where-Object { Test-Path (Join-Path $_ 'makensis.exe') } | Select-Object -First 1
+          if (-not $nsisPath -and (Get-Command makensis.exe -ErrorAction SilentlyContinue)) {
+            $nsisPath = Split-Path (Get-Command makensis.exe).Source
+          }
+          if (-not $nsisPath) {
+            $nsisPath = Join-Path ${env:ProgramFiles(x86)} 'NSIS'
             choco install nsis --yes --no-progress
           }
-          'C:\Program Files (x86)\NSIS' | Out-File -FilePath $env:GITHUB_PATH -Append
+          if (-not (Test-Path (Join-Path $nsisPath 'makensis.exe'))) { throw 'makensis.exe tidak ditemukan setelah pemasangan NSIS' }
+          $nsisPath | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Build portable exe
         working-directory: desktop
         run: wails3 task windows:build ARCH=amd64
