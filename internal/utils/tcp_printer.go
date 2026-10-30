@@ -120,10 +120,10 @@ func PrintTCPDocument(ctx context.Context, uri string, pdf []byte, copies int, m
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	for copyNumber := 1; copyNumber <= copies; copyNumber++ {
-		written, err := sendTCPCopy(ctx, u.Host, pdf)
+		connected, err := sendTCPCopy(ctx, u.Host, pdf)
 		if err != nil {
 			failure := fmt.Errorf("pengiriman ke %s pada salinan %d dari %d gagal: %w", u.Host, copyNumber, copies, err)
-			if written > 0 || copyNumber > 1 {
+			if connected || copyNumber > 1 {
 				return &TCPSubmissionError{Err: failure}
 			}
 			return failure
@@ -132,21 +132,21 @@ func PrintTCPDocument(ctx context.Context, uri string, pdf []byte, copies int, m
 	return nil
 }
 
-func sendTCPCopy(ctx context.Context, address string, pdf []byte) (int64, error) {
+func sendTCPCopy(ctx context.Context, address string, pdf []byte) (bool, error) {
 	conn, err := (&net.Dialer{Timeout: 8 * time.Second}).DialContext(ctx, "tcp", address)
 	if err != nil {
-		return 0, fmt.Errorf("server aplikasi tidak dapat terhubung ke printer: %w", err)
+		return false, fmt.Errorf("server aplikasi tidak dapat terhubung ke printer: %w", err)
 	}
 	defer conn.Close()
 	deadline, _ := ctx.Deadline()
 	if err := conn.SetWriteDeadline(deadline); err != nil {
-		return 0, err
+		return true, err
 	}
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
-	written, err := io.Copy(conn, bytes.NewReader(pdf))
+	_, err = io.Copy(conn, bytes.NewReader(pdf))
 	if err != nil {
-		return written, err
+		return true, err
 	}
-	return written, conn.Close()
+	return true, conn.Close()
 }
