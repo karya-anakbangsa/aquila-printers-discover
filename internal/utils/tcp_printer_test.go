@@ -11,6 +11,18 @@ import (
 )
 
 func TestNormalizePrinterURI(t *testing.T) {
+	queueURI := WindowsQueueURI(`EPSON L5190\USB: β`)
+	if got, err := NormalizePrinterURI(queueURI); err != nil || got != queueURI {
+		t.Fatalf("local Windows queue URI = %q, %v; want %q", got, err, queueURI)
+	}
+	if got, err := WindowsQueueName(queueURI); err != nil || got != `EPSON L5190\USB: β` {
+		t.Fatalf("local Windows queue name = %q, %v", got, err)
+	}
+	for _, invalid := range []string{"winspool://queue/", "winspool://queue/not-base64!", "winspool://other/QQ", "winspool://queue/QQ?x=1"} {
+		if _, err := NormalizePrinterURI(invalid); err == nil {
+			t.Errorf("accepted invalid Windows queue URI %q", invalid)
+		}
+	}
 	for _, tc := range []struct{ input, want string }{
 		{"192.168.1.10", "ipp://192.168.1.10:631/ipp/print"},
 		{"tcp://192.168.1.10:9001", "tcp://192.168.1.10:9001"},

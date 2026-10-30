@@ -6,10 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/RSISA-Semarang/rsisa-print-server/internal/utils"
 )
 
 func portOwnerProcesses(port int) ([]string, error) {
@@ -25,7 +26,7 @@ $names = @($connections | ForEach-Object {
   if ($process) { $process.ProcessName }
 }) | Where-Object { $_ -and $_.Trim() -ne '' } | Sort-Object -Unique
 ConvertTo-Json -InputObject @($names) -Compress`
-	command := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
+	command := utils.PowerShellCommand(ctx, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
 	output, err := command.Output()
 	if err != nil {
 		if ctx.Err() != nil {

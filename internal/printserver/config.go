@@ -38,6 +38,8 @@ type LocalPrinter struct {
 	IsDefault bool   `json:"is_default"`
 	Driver    string `json:"driver,omitempty"`
 	Port      string `json:"port,omitempty"`
+	IP        string `json:"ip,omitempty"`
+	URI       string `json:"uri,omitempty"`
 }
 
 type Config struct {

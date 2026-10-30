@@ -202,6 +202,15 @@ jobs:
           - File konfigurasi tetap ada saat instal ulang.
           - Verifikasi unduhan dengan \`sha256sum -c checksums.txt\`.
 
+          ### Bantuan uji Windows
+
+          Tidak perlu membuka Command Prompt atau PowerShell.
+
+          1. Unduh \`Aquila-windows-amd64.exe\` untuk menjalankan versi portable.
+          2. Jika Aquila versi lama masih terbuka, tutup lewat ikon Aquila di dekat jam Windows → klik kanan → **Keluar**.
+          3. Klik dua kali file yang diunduh. Pastikan panel Aquila terbuka dan jumlah printer terdeteksi.
+          4. Jika aplikasi farmasi sudah menampilkan antrean printer PC, pilih antrean itu dan cetak halaman tes. Kabari tim apakah halaman keluar; foto pesan kesalahan juga membantu.
+
           EOF
       - name: Terbitkan ke GitHub Releases
         env:

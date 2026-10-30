@@ -28,6 +28,12 @@ func NormalizePrinterURI(raw string) (string, error) {
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" {
 		return "", errors.New("alamat printer tidak valid")
 	}
+	if u.Scheme == windowsQueueScheme {
+		if _, err := WindowsQueueName(raw); err != nil {
+			return "", err
+		}
+		return raw, nil
+	}
 	if u.Scheme == "socket" {
 		u.Scheme = "tcp"
 	}

@@ -159,12 +159,23 @@ func (s *Server) submitPDF(c *fiber.Ctx) error {
 		}
 		return fiber.NewError(fiber.StatusBadGateway, err.Error())
 	}
-	s.logf("INFO", "POST /print/%s -> %s 202 (job %d)", docType, printer.Name, ippJobID)
-	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
-		"message":    "Dokumen sudah dikirim ke printer. Periksa hasil cetaknya.",
-		"printer":    printer.Name,
-		"ipp_job_id": ippJobID,
-	})
+	_, windowsQueueErr := utils.WindowsQueueName(printer.URI)
+	windowsQueue := windowsQueueErr == nil
+	if ippJobID > 0 {
+		s.logf("INFO", "POST /print/%s -> %s 202 (IPP job %d)", docType, printer.Name, ippJobID)
+	} else if windowsQueue {
+		s.logf("INFO", "POST /print/%s -> %s 202 (Windows driver)", docType, printer.Name)
+	} else {
+		s.logf("INFO", "POST /print/%s -> %s 202 (local print queue)", docType, printer.Name)
+	}
+	response := fiber.Map{
+		"message": "Dokumen sudah dikirim ke printer. Periksa hasil cetaknya.",
+		"printer": printer.Name,
+	}
+	if !windowsQueue {
+		response["ipp_job_id"] = ippJobID
+	}
+	return c.Status(fiber.StatusAccepted).JSON(response)
 }
 
 func listLocalPrinters(c *fiber.Ctx) error {
@@ -245,11 +256,15 @@ func listCUPSPrinters(ctx context.Context) ([]LocalPrinter, error) {
 }
 
 func listWindowsPrinters(ctx context.Context) ([]LocalPrinter, error) {
-	script := `$ErrorActionPreference = 'Stop'; $items = @(Get-CimInstance Win32_Printer | ForEach-Object { $state = if ($_.WorkOffline -or $_.PrinterStatus -eq 7) { 'offline' } elseif ($_.PrinterStatus -eq 8 -or $_.PrinterStatus -eq 6) { 'disabled' } elseif ($_.PrinterStatus -eq 4) { 'printing' } elseif ($_.PrinterStatus -eq 3 -or $_.PrinterStatus -eq 0) { 'ready' } else { 'unknown' }; [PSCustomObject]@{ name = $_.Name; state = $state; is_default = $_.Default; driver = $_.DriverName; port = $_.PortName } }); ConvertTo-Json -InputObject $items -Compress`
-	output, err := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script).CombinedOutput()
+	script := `$ErrorActionPreference = 'Stop'; $ports = @{}; Get-CimInstance Win32_TCPIPPrinterPort -ErrorAction SilentlyContinue | ForEach-Object { $ports[$_.Name] = $_.HostAddress }; $items = @(Get-CimInstance Win32_Printer | ForEach-Object { $state = if ($_.WorkOffline -or $_.PrinterStatus -eq 7) { 'offline' } elseif ($_.PrinterStatus -eq 8 -or $_.PrinterStatus -eq 6) { 'disabled' } elseif ($_.PrinterStatus -eq 4) { 'printing' } elseif ($_.PrinterStatus -eq 3 -or $_.PrinterStatus -eq 0) { 'ready' } else { 'unknown' }; [PSCustomObject]@{ name = $_.Name; state = $state; is_default = $_.Default; driver = $_.DriverName; port = $_.PortName; ip = $ports[$_.PortName] } }); ConvertTo-Json -InputObject $items -Compress`
+	output, err := hiddenWindowsCommand(ctx, script).CombinedOutput()
 	if err != nil {
 		return nil, commandFailure("Get-CimInstance Win32_Printer", output, err)
 	}
+	return parseWindowsPrinters(output)
+}
+
+func parseWindowsPrinters(output []byte) ([]LocalPrinter, error) {
 	trimmed := strings.TrimSpace(string(output))
 	if trimmed == "" || trimmed == "null" {
 		return []LocalPrinter{}, nil
@@ -257,6 +272,9 @@ func listWindowsPrinters(ctx context.Context) ([]LocalPrinter, error) {
 	var printers []LocalPrinter
 	if err := json.Unmarshal([]byte(trimmed), &printers); err != nil {
 		return nil, fmt.Errorf("baca daftar printer Windows: %w", err)
+	}
+	for index := range printers {
+		printers[index].URI = utils.WindowsQueueURI(printers[index].Name)
 	}
 	return printers, nil
 }
@@ -382,6 +400,12 @@ func sendQualityTestPage(ctx context.Context, printerName string, options utils.
 }
 
 func submitPrinterPDF(ctx context.Context, uri string, pdf []byte, jobName, userName string, copies int, media string) (int, error) {
+	if queueName, err := utils.WindowsQueueName(uri); err == nil {
+		if runtime.GOOS != "windows" {
+			return 0, fmt.Errorf("antrean Windows hanya dapat dicetak dari Aquila yang berjalan di Windows")
+		}
+		return 0, printPDFToWindowsQueue(ctx, queueName, pdf, jobName, copies, media)
+	}
 	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
 		if queue := localCUPSQueue(uri); queue != "" {
 			return 0, printPDFToCUPS(ctx, queue, pdf, jobName, copies, media)

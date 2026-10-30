@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 
 	"github.com/RSISA-Semarang/rsisa-print-server/internal/utils"
 )
@@ -116,7 +115,7 @@ $doc.add_PrintPage({
   $e.HasMorePages = $false
 })
 try { $doc.Print() } finally { $doc.Dispose() }`
-	command := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script)
+	command := hiddenWindowsCommand(ctx, script)
 	command.Env = append(os.Environ(),
 		"RSISA_PRINTER_NAME="+printerName,
 		"RSISA_TEST_WIDTH="+fmt.Sprintf("%.2f", widthMM),
