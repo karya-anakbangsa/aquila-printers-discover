@@ -97,6 +97,9 @@ Section
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 
+    # Daftarkan inbound firewall rule untuk mDNS (UDP 5353) agar penemuan printer jaringan otomatis berjalan
+    ExecWait 'netsh advfirewall firewall add rule name="${INFO_PRODUCTNAME} (mDNS)" dir=in action=allow protocol=UDP localport=5353 program="$INSTDIR\${PRODUCT_EXECUTABLE}" enable=yes'
+
     !insertmacro wails.associateFiles
     !insertmacro wails.associateCustomProtocols
     
@@ -108,6 +111,9 @@ Section "uninstall"
 
     # The app may still be running in the tray; terminate it so its server releases the port.
     ExecWait '"$SYSDIR\taskkill.exe" /F /IM "${PRODUCT_EXECUTABLE}"'
+
+    # Hapus inbound firewall rule untuk mDNS
+    ExecWait 'netsh advfirewall firewall delete rule name="${INFO_PRODUCTNAME} (mDNS)"'
 
     RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "aquila"

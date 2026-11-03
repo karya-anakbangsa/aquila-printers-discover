@@ -426,7 +426,7 @@ func (c *Core) ClearLogs() { c.logs.Clear() }
 
 // PrinterCount menghitung antrean printer yang terdeteksi pada PC ini.
 func (c *Core) PrinterCount() int {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	printers, err := printserver.ListPrinters(ctx)
 	if err != nil {

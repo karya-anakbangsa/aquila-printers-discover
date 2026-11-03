@@ -28,7 +28,7 @@ func printPDFToWindowsQueue(ctx context.Context, printerName string, pdf []byte,
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("simpan dokumen cetak: %w", err)
 	}
-	command := utils.PowerShellCommand(ctx, "-NoProfile", "-NonInteractive", "-Command", windowsPDFPrintScript)
+	command := utils.PowerShellCommand(ctx, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", windowsPDFPrintScript)
 	command.Env = append(os.Environ(), "AQUILA_PDF_PATH="+path, "AQUILA_PRINTER_NAME="+printerName, "AQUILA_PRINT_JOB="+jobName, fmt.Sprintf("AQUILA_COPIES=%d", copies), "AQUILA_MEDIA="+media)
 	output, err := command.CombinedOutput()
 	if err != nil {
@@ -44,18 +44,30 @@ $null = [Windows.Storage.StorageFile, Windows.Storage, ContentType=WindowsRuntim
 $null = [Windows.Data.Pdf.PdfDocument, Windows.Data.Pdf, ContentType=WindowsRuntime]
 $null = [Windows.Data.Pdf.PdfPageRenderOptions, Windows.Data.Pdf, ContentType=WindowsRuntime]
 $null = [Windows.Storage.Streams.InMemoryRandomAccessStream, Windows.Storage, ContentType=WindowsRuntime]
-function Wait-WinRT($operation) {
-  while ($operation.Status.ToString() -eq 'Started') { [System.Threading.Thread]::Sleep(10) }
-  if ($operation.Status.ToString() -ne 'Completed') { throw "PDF Windows Runtime operation failed: $($operation.Status) $($operation.ErrorCode)" }
-  $operation.GetResults()
+$asTaskGeneric = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+  $_.Name -eq 'AsTask' -and $_.IsGenericMethod -and $_.GetGenericArguments().Count -eq 1 -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name.StartsWith('IAsyncOperation')
+} | Select-Object -First 1
+$asTaskAction = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+  $_.Name -eq 'AsTask' -and (-not $_.IsGenericMethod) -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncAction'
+} | Select-Object -First 1
+function Wait-WinRT($operation, [Type]$resultType = $null) {
+  if ($null -eq $operation) { throw 'WinRT asynchronous operation bernilai null' }
+  if ($resultType) {
+    $netTask = $asTaskGeneric.MakeGenericMethod($resultType).Invoke($null, @($operation))
+    $netTask.Wait(-1) | Out-Null
+    return $netTask.Result
+  }
+  $netTask = $asTaskAction.Invoke($null, @($operation))
+  $netTask.Wait(-1) | Out-Null
 }
-$storageFile = Wait-WinRT ([Windows.Storage.StorageFile]::GetFileFromPathAsync($env:AQUILA_PDF_PATH))
-$pdf = Wait-WinRT ([Windows.Data.Pdf.PdfDocument]::LoadFromFileAsync($storageFile))
+$pdfPath = [System.IO.Path]::GetFullPath($env:AQUILA_PDF_PATH)
+$storageFile = Wait-WinRT ([Windows.Storage.StorageFile]::GetFileFromPathAsync($pdfPath)) ([Windows.Storage.StorageFile])
+$pdf = Wait-WinRT ([Windows.Data.Pdf.PdfDocument]::LoadFromFileAsync($storageFile)) ([Windows.Data.Pdf.PdfDocument])
 if ($pdf.PageCount -lt 1) { throw 'PDF tidak memiliki halaman' }
 $doc = [System.Drawing.Printing.PrintDocument]::new()
 $doc.PrinterSettings.PrinterName = $env:AQUILA_PRINTER_NAME
 if (-not $doc.PrinterSettings.IsValid) { throw 'Antrean printer Windows tidak ditemukan' }
-$doc.PrinterSettings.Copies = [short]::Parse($env:AQUILA_COPIES)
+$doc.PrinterSettings.Copies = [int16]::Parse($env:AQUILA_COPIES)
 $doc.DocumentName = $env:AQUILA_PRINT_JOB
 $doc.PrintController = [System.Drawing.Printing.StandardPrintController]::new()
 $doc.DefaultPageSettings.Margins = [System.Drawing.Printing.Margins]::new(0, 0, 0, 0)
@@ -98,7 +110,7 @@ $doc.add_PrintPage({
     $randomStream.Seek(0)
     $imageStream = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($randomStream)
     $bitmap = [System.Drawing.Image]::FromStream($imageStream)
-    $bounds = $e.MarginBounds
+    $bounds = $e.PageBounds
     $scale = [math]::Min($bounds.Width / [double]$bitmap.Width, $bounds.Height / [double]$bitmap.Height)
     $width = [single]($bitmap.Width * $scale)
     $height = [single]($bitmap.Height * $scale)
@@ -114,4 +126,4 @@ $doc.add_PrintPage({
     $page.Dispose()
   }
 }.GetNewClosure())
-try { $doc.Print() } finally { $doc.Dispose(); $pdf.Dispose() }`
+try { $doc.Print() } finally { $doc.Dispose() }`

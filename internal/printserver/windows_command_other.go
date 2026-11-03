@@ -10,5 +10,5 @@ import (
 )
 
 func hiddenWindowsCommand(ctx context.Context, script string) *exec.Cmd {
-	return utils.PowerShellCommand(ctx, "-NoProfile", "-NonInteractive", "-Command", script)
+	return utils.PowerShellCommand(ctx, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
 }

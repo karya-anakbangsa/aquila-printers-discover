@@ -37,6 +37,27 @@ func TestParseWindowsPrintersAllowsQueuesWithoutNetworkIP(t *testing.T) {
 	}
 }
 
+func TestParseWindowsPrintersSingleObject(t *testing.T) {
+	got, err := parseWindowsPrinters([]byte(`{"name":"L3150 Series(Network)","state":"ready","is_default":true,"driver":"EPSON L3150 Series","port":"IP_192.168.1.50","ip":"192.168.1.50"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Name != "L3150 Series(Network)" || got[0].Port != "IP_192.168.1.50" || got[0].URI != utils.WindowsQueueURI("L3150 Series(Network)") {
+		t.Fatalf("parsed single printer = %+v", got)
+	}
+}
+
+func TestParseWindowsPrintersHandlesSingleObject(t *testing.T) {
+	singleJSON := `{"name":"Epson L5190","state":"ready","is_default":true,"driver":"Epson Driver","port":"USB001","ip":null}`
+	got, err := parseWindowsPrinters([]byte(singleJSON))
+	if err != nil {
+		t.Fatalf("gagal membaca printer tunggal: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "Epson L5190" {
+		t.Fatalf("hasil parse tidak valid: %+v", got)
+	}
+}
+
 func TestLocalPrinterOmitsWindowsMetadataWhenUnavailable(t *testing.T) {
 	encoded, err := json.Marshal(LocalPrinter{Name: "USB Printer", State: "ready"})
 	if err != nil {

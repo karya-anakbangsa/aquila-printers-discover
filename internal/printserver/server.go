@@ -270,8 +270,16 @@ func parseWindowsPrinters(output []byte) ([]LocalPrinter, error) {
 		return []LocalPrinter{}, nil
 	}
 	var printers []LocalPrinter
-	if err := json.Unmarshal([]byte(trimmed), &printers); err != nil {
-		return nil, fmt.Errorf("baca daftar printer Windows: %w", err)
+	if strings.HasPrefix(trimmed, "[") {
+		if err := json.Unmarshal([]byte(trimmed), &printers); err != nil {
+			return nil, fmt.Errorf("baca daftar printer Windows: %w", err)
+		}
+	} else {
+		var single LocalPrinter
+		if err := json.Unmarshal([]byte(trimmed), &single); err != nil {
+			return nil, fmt.Errorf("baca printer tunggal Windows: %w", err)
+		}
+		printers = []LocalPrinter{single}
 	}
 	for index := range printers {
 		printers[index].URI = utils.WindowsQueueURI(printers[index].Name)
