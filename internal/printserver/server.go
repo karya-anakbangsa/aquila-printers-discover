@@ -1,7 +1,9 @@
 package printserver
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,7 +58,13 @@ func New(cfg Config, events EventLog) *Server {
 	})
 	app.Get("/printers", listLocalPrinters)
 	app.Get("/printers/discover", discoverNetworkPrinters)
+	app.Get("/printers/usb", listUSBPrinters)
+	app.Get("/printers/ports", listActivePorts)
+	app.Post("/printers/set-port", server.setPrinterPortEndpoint)
+	app.Post("/printers/clear-queue", server.clearPrinterQueueEndpoint)
 	app.Post("/printers/test", server.testLocalPrinter)
+	app.Post("/printers/raw", server.submitRaw)
+	app.Post("/print-raw", server.submitRaw)
 	app.Post("/print/:documentType", server.submitPDF)
 	server.app = app
 	return server
@@ -104,7 +112,10 @@ func (s *Server) submitPDF(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusRequestEntityTooLarge, "ukuran PDF maksimal 20 MB")
 	}
 	pdf := c.Body()
-	if len(pdf) < 5 || string(pdf[:5]) != "%PDF-" {
+	isRaw := strings.EqualFold(c.Get("X-RSISA-Raw"), "true") ||
+		strings.HasPrefix(c.Get(fiber.HeaderContentType), "text/") ||
+		strings.HasPrefix(c.Get(fiber.HeaderContentType), "application/octet-stream")
+	if !isRaw && (len(pdf) < 5 || string(pdf[:5]) != "%PDF-") {
 		return fiber.NewError(fiber.StatusUnsupportedMediaType, "kirim isi file PDF dengan Content-Type application/pdf")
 	}
 	module := strings.TrimSpace(c.Query("module_code"))
@@ -143,6 +154,20 @@ func (s *Server) submitPDF(c *fiber.Ctx) error {
 		printer, found = findPrinter(cfg, route.Printer)
 		if !found {
 			return fiber.NewError(fiber.StatusUnprocessableEntity, "printer tujuan tidak ditemukan di konfigurasi print server")
+		}
+	}
+	if isRaw {
+		queueName, windowsQueueErr := utils.WindowsQueueName(printer.URI)
+		if windowsQueueErr == nil {
+			if err := utils.PrintRawToWindowsPrinter(queueName, pdf, docType); err != nil {
+				s.logf("ERROR", "POST /print/%s gagal (raw) ke %s: %v", docType, printer.Name, err)
+				return fiber.NewError(fiber.StatusBadGateway, err.Error())
+			}
+			s.logf("INFO", "POST /print/%s -> %s 202 (Windows USB/RAW)", docType, printer.Name)
+			return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
+				"message": "Dokumen RAW sudah dikirim ke antrean printer USB. Periksa hasil cetaknya.",
+				"printer": printer.Name,
+			})
 		}
 	}
 	if utils.IsTCPPrinter(printer.URI) {
@@ -250,7 +275,7 @@ func listCUPSPrinters(ctx context.Context) ([]LocalPrinter, error) {
 		case !strings.Contains(statusText, "idle") && !strings.Contains(statusText, "enabled"):
 			state = "unknown"
 		}
-		printers = append(printers, LocalPrinter{Name: name, State: state, IsDefault: name == defaultName})
+		printers = append(printers, LocalPrinter{Name: name, State: state, IsDefault: name == defaultName, ConnectionType: "local"})
 	}
 	return printers, nil
 }
@@ -283,6 +308,12 @@ func parseWindowsPrinters(output []byte) ([]LocalPrinter, error) {
 	}
 	for index := range printers {
 		printers[index].URI = utils.WindowsQueueURI(printers[index].Name)
+		printers[index].ConnectionType = DetermineConnectionType(printers[index].Port, printers[index].Driver, printers[index].IP)
+		if IsThermalOrPOS(printers[index].Name, printers[index].Driver, printers[index].Port) {
+			printers[index].PrinterType = "thermal"
+		} else {
+			printers[index].PrinterType = "document"
+		}
 	}
 	return printers, nil
 }
@@ -306,8 +337,8 @@ func (s *Server) testLocalPrinter(c *fiber.Ctx) error {
 	if _, _, _, err := request.PrinterTestOptions.Dimensions(); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
-	if request.Mode != "" && request.Mode != "bw" && request.Mode != "color" {
-		return fiber.NewError(fiber.StatusBadRequest, "mode cetak harus hitam putih atau warna")
+	if request.Mode != "" && request.Mode != "bw" && request.Mode != "color" && request.Mode != "raw" {
+		return fiber.NewError(fiber.StatusBadRequest, "mode cetak harus hitam putih, warna, atau raw")
 	}
 	ctx, cancel := context.WithTimeout(c.UserContext(), 45*time.Second)
 	defer cancel()
@@ -321,6 +352,23 @@ func (s *Server) testLocalPrinter(c *fiber.Ctx) error {
 		}
 		if request.Name == "" {
 			request.Name = uri
+		}
+		if request.Mode == "raw" {
+			if qName, qErr := utils.WindowsQueueName(uri); qErr == nil {
+				rawData := generateRawTestBytes(qName)
+				if err := utils.PrintRawToWindowsPrinter(qName, rawData, "Tes Printer USB"); err != nil {
+					s.logf("ERROR", "tes raw printer %s gagal: %v", qName, err)
+					return fiber.NewError(fiber.StatusBadGateway, err.Error())
+				}
+				s.logf("INFO", "halaman uji raw ESC/POS dikirim ke antrean USB %s", qName)
+				return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
+					"message": "Halaman uji RAW/ESC-POS dikirim ke printer USB. Periksa hasil cetaknya.",
+					"printer": qName,
+					"uri":     uri,
+					"state":   "sent",
+					"mode":    "raw",
+				})
+			}
 		}
 		pdf, err := utils.GeneratePrinterTestPDF(request.Name, request.PrinterTestOptions)
 		if err != nil {
@@ -364,6 +412,26 @@ func (s *Server) testLocalPrinter(c *fiber.Ctx) error {
 	if selected.State == "offline" || selected.State == "disabled" {
 		return fiber.NewError(fiber.StatusConflict, "printer sedang offline atau dinonaktifkan pada PC ini")
 	}
+	if request.Mode == "raw" {
+		rawData := generateRawTestBytes(selected.Name)
+		var err error
+		if selected.ConnectionType == "serial" || strings.HasPrefix(strings.ToUpper(selected.Port), "COM") {
+			err = utils.PrintRawToSerialPort(selected.Port, rawData)
+		} else {
+			err = utils.PrintRawToWindowsPrinter(selected.Name, rawData, "Tes Printer USB")
+		}
+		if err != nil {
+			s.logf("ERROR", "tes raw printer %s gagal: %v", selected.Name, err)
+			return fiber.NewError(fiber.StatusBadGateway, err.Error())
+		}
+		s.logf("INFO", "halaman uji raw ESC/POS dikirim ke antrean USB %s", selected.Name)
+		return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
+			"message": "Halaman uji RAW/ESC-POS dikirim ke printer USB. Periksa hasil cetaknya.",
+			"printer": selected.Name,
+			"state":   "sent",
+			"mode":    "raw",
+		})
+	}
 	if err := sendQualityTestPage(ctx, selected.Name, request.PrinterTestOptions); err != nil {
 		s.logf("ERROR", "tes printer %s gagal: %v", selected.Name, err)
 		return fiber.NewError(fiber.StatusBadGateway, err.Error())
@@ -390,6 +458,97 @@ func listPrintersForPlatform(ctx context.Context) ([]LocalPrinter, error) {
 // ListPrinters membaca antrean printer yang dikenal OS pada PC ini.
 func ListPrinters(ctx context.Context) ([]LocalPrinter, error) {
 	return listPrintersForPlatform(ctx)
+}
+
+// SetPrinterPortFromDesktop updates the port of a printer from the desktop app.
+func SetPrinterPortFromDesktop(ctx context.Context, printerName, portName string) error {
+	return utils.SetWindowsPrinterPort(ctx, printerName, portName)
+}
+
+// ClearPrinterQueueFromDesktop removes all queued jobs for a printer from the desktop app.
+func ClearPrinterQueueFromDesktop(ctx context.Context, printerName string) error {
+	return utils.ClearWindowsPrintQueue(ctx, printerName)
+}
+
+// ListPrinterPortsFromDesktop returns all registered printer ports.
+func ListPrinterPortsFromDesktop(ctx context.Context) ([]string, error) {
+	ports, _ := utils.ListWindowsPrinterPorts(ctx)
+	serialPorts := utils.ListSerialPorts()
+	seen := make(map[string]bool)
+	var allPorts []string
+	for _, p := range ports {
+		p = strings.TrimSpace(p)
+		if p != "" && !seen[strings.ToUpper(p)] {
+			seen[strings.ToUpper(p)] = true
+			allPorts = append(allPorts, p)
+		}
+	}
+	for _, p := range serialPorts {
+		p = strings.TrimSpace(p)
+		if p != "" && !seen[strings.ToUpper(p)] {
+			seen[strings.ToUpper(p)] = true
+			allPorts = append(allPorts, p)
+		}
+	}
+	if allPorts == nil {
+		allPorts = []string{}
+	}
+	return allPorts, nil
+}
+
+// TestPrinterFromDesktop menguji cetak ke printer tertentu dari aplikasi desktop.
+// Jika mode bernilai "auto" atau kosong, secara otomatis mendeteksi apakah printer thermal (RAW ESC/POS) atau printer dokumen (A4).
+func TestPrinterFromDesktop(ctx context.Context, name, uri, mode string) error {
+	name = strings.TrimSpace(name)
+	uri = strings.TrimSpace(uri)
+	mode = strings.ToLower(strings.TrimSpace(mode))
+
+	// Jika mode "auto" atau kosong, lakukan deteksi dinamis:
+	if mode == "" || mode == "auto" {
+		if strings.HasPrefix(strings.ToUpper(uri), "SERIAL://") || strings.HasPrefix(strings.ToUpper(name), "COM") || IsThermalOrPOS(name, "", "") {
+			mode = "raw"
+		} else {
+			mode = "bw"
+		}
+	}
+
+	if mode == "raw" {
+		if qName, err := utils.WindowsQueueName(uri); err == nil && qName != "" {
+			name = qName
+		}
+		if name == "" {
+			return errors.New("nama printer tujuan tidak boleh kosong")
+		}
+		rawData := generateRawTestBytes(name)
+		if strings.HasPrefix(strings.ToUpper(uri), "SERIAL://") || strings.HasPrefix(strings.ToUpper(name), "COM") {
+			port := strings.TrimPrefix(uri, "serial://")
+			if port == "" {
+				port = name
+			}
+			return utils.PrintRawToSerialPort(port, rawData)
+		}
+		return utils.PrintRawToWindowsPrinter(name, rawData, "Tes Printer USB")
+	}
+
+	opts := utils.PrinterTestOptions{
+		Paper: "A4",
+		Mode:  mode,
+	}
+	if opts.Mode == "" {
+		opts.Mode = "bw"
+	}
+	if uri != "" {
+		if _, qErr := utils.WindowsQueueName(uri); qErr != nil {
+			// Printer IPP jaringan Wi-Fi
+			pdf, err := utils.GeneratePrinterTestPDF(name, opts)
+			if err != nil {
+				return err
+			}
+			_, err = utils.PrintIPPDocument(ctx, uri, pdf, "Tes Printer", "aquila", 1, "")
+			return err
+		}
+	}
+	return sendQualityTestPage(ctx, name, opts)
 }
 
 func sendQualityTestPage(ctx context.Context, printerName string, options utils.PrinterTestOptions) error {
@@ -533,7 +692,7 @@ func (s *Server) corsMiddleware(c *fiber.Ctx) error {
 		c.Set("Vary", "Origin")
 	}
 	c.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	c.Set("Access-Control-Allow-Headers", "Content-Type, X-RSISA-Printer-Name, X-RSISA-Printer-URI, X-RSISA-Copies, X-RSISA-Media")
+	c.Set("Access-Control-Allow-Headers", "Content-Type, X-RSISA-Printer-Name, X-RSISA-Printer-URI, X-RSISA-Printer-Port, X-RSISA-Doc-Title, X-RSISA-Raw, X-RSISA-Copies, X-RSISA-Media")
 	if c.Method() == fiber.MethodOptions {
 		if strings.EqualFold(c.Get("Access-Control-Request-Private-Network"), "true") {
 			c.Set("Access-Control-Allow-Private-Network", "true")
@@ -541,4 +700,251 @@ func (s *Server) corsMiddleware(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusNoContent)
 	}
 	return c.Next()
+}
+
+func generateRawTestBytes(printerName string) []byte {
+	var buf bytes.Buffer
+	// Inisialisasi printer ESC/POS
+	buf.Write([]byte("\x1b\x40"))       // ESC @: Reset & Inisialisasi
+	buf.Write([]byte("\x1b\x74\x00"))   // ESC t 0: Code table standard / CP437
+	buf.Write([]byte("\x1b\x61\x01"))   // ESC a 1: Center alignment
+	buf.Write([]byte("\x1b\x21\x30"))   // Double height & double width
+	buf.WriteString("RSISA PRINT SERVER\n")
+	buf.Write([]byte("\x1b\x21\x00"))   // Font normal
+	buf.WriteString("Uji Komunikasi USB Plug & Play\n")
+	buf.WriteString("================================\n")
+	buf.Write([]byte("\x1b\x61\x00"))   // Left alignment
+	buf.WriteString("Printer : " + printerName + "\n")
+	buf.WriteString("Waktu   : " + time.Now().Format("02/01/2006 15:04:05") + "\n")
+	buf.WriteString("Mode    : Direct Raw Spooler (Win32)\n")
+	buf.WriteString("--------------------------------\n")
+	buf.WriteString("Status  : BERHASIL TERHUBUNG OK!\n")
+	buf.WriteString("Angka   : 0123456789\n")
+	buf.WriteString("Huruf   : Aa Bb Cc Dd Ee Ff Gg Hh\n")
+	buf.WriteString("================================\n")
+	buf.Write([]byte("\x1b\x61\x01"))   // Center alignment
+	buf.WriteString("CV ANAK BANGSA\n")
+	buf.WriteString("*** SELESAI ***\n")
+	buf.WriteString("\n\n\n\n")         // Feed line agar tidak terpotong teksnya
+	buf.Write([]byte("\x1d\x56\x41\x00")) // GS V 65 0: Paper cut (auto cutter)
+	buf.Write([]byte("\x0c"))             // FF: Form Feed (kompatibilitas dot matrix / miniprinter)
+	return buf.Bytes()
+}
+
+func listUSBPrinters(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 10*time.Second)
+	defer cancel()
+	printers, err := listPrintersForPlatform(ctx)
+	usbPrinters := make([]LocalPrinter, 0)
+	if err == nil {
+		for _, p := range printers {
+			if p.ConnectionType == "usb" || p.ConnectionType == "serial" {
+				usbPrinters = append(usbPrinters, p)
+			}
+		}
+	}
+	ports := utils.ListSerialPorts()
+	if ports == nil {
+		ports = []string{}
+	}
+	return c.JSON(fiber.Map{
+		"data":     usbPrinters,
+		"ports":    ports,
+		"platform": runtime.GOOS,
+	})
+}
+
+func listActivePorts(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
+	defer cancel()
+	ports, _ := utils.ListWindowsPrinterPorts(ctx)
+	serialPorts := utils.ListSerialPorts()
+	seen := make(map[string]bool)
+	var allPorts []string
+	for _, p := range ports {
+		p = strings.TrimSpace(p)
+		if p != "" && !seen[strings.ToUpper(p)] {
+			seen[strings.ToUpper(p)] = true
+			allPorts = append(allPorts, p)
+		}
+	}
+	for _, p := range serialPorts {
+		p = strings.TrimSpace(p)
+		if p != "" && !seen[strings.ToUpper(p)] {
+			seen[strings.ToUpper(p)] = true
+			allPorts = append(allPorts, p)
+		}
+	}
+	if allPorts == nil {
+		allPorts = []string{}
+	}
+	return c.JSON(fiber.Map{
+		"ports":    allPorts,
+		"platform": runtime.GOOS,
+	})
+}
+
+type setPortRequest struct {
+	Printer string `json:"printer"`
+	Port    string `json:"port"`
+}
+
+func (s *Server) setPrinterPortEndpoint(c *fiber.Ctx) error {
+	var req setPortRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "parameter ganti port tidak valid")
+	}
+	req.Printer = strings.TrimSpace(req.Printer)
+	req.Port = strings.TrimSpace(req.Port)
+	if req.Printer == "" || req.Port == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "nama printer dan port tujuan wajib diisi")
+	}
+	ctx, cancel := context.WithTimeout(c.UserContext(), 10*time.Second)
+	defer cancel()
+	if err := utils.SetWindowsPrinterPort(ctx, req.Printer, req.Port); err != nil {
+		s.logf("ERROR", "gagal memindahkan port '%s' ke '%s': %v", req.Printer, req.Port, err)
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	s.logf("INFO", "berhasil memindahkan port printer '%s' ke '%s'", req.Printer, req.Port)
+	return c.JSON(fiber.Map{
+		"message": fmt.Sprintf("Port printer '%s' berhasil diubah ke '%s'", req.Printer, req.Port),
+		"printer": req.Printer,
+		"port":    req.Port,
+	})
+}
+
+type clearQueueRequest struct {
+	Printer string `json:"printer"`
+}
+
+func (s *Server) clearPrinterQueueEndpoint(c *fiber.Ctx) error {
+	var req clearQueueRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "parameter tidak valid")
+	}
+	req.Printer = strings.TrimSpace(req.Printer)
+	if req.Printer == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "nama printer wajib diisi")
+	}
+	ctx, cancel := context.WithTimeout(c.UserContext(), 10*time.Second)
+	defer cancel()
+	if err := utils.ClearWindowsPrintQueue(ctx, req.Printer); err != nil {
+		s.logf("ERROR", "gagal membersihkan antrean '%s': %v", req.Printer, err)
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	s.logf("INFO", "antrean printer '%s' berhasil dibersihkan", req.Printer)
+	return c.JSON(fiber.Map{
+		"message": fmt.Sprintf("Antrean cetak untuk '%s' berhasil dibersihkan", req.Printer),
+		"printer": req.Printer,
+	})
+}
+
+type rawPrintRequest struct {
+	Printer  string `json:"printer"`
+	Port     string `json:"port"`
+	URI      string `json:"uri"`
+	Data     string `json:"data"`
+	IsBase64 bool   `json:"is_base64"`
+	Title    string `json:"title"`
+}
+
+func (s *Server) submitRaw(c *fiber.Ctx) error {
+	var (
+		printerName string
+		port        string
+		data        []byte
+		docTitle    string
+	)
+
+	body := c.Body()
+	if len(body) == 0 {
+		return fiber.NewError(fiber.StatusBadRequest, "data cetak tidak boleh kosong")
+	}
+
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) > 0 && trimmed[0] == '{' {
+		var req rawPrintRequest
+		if err := json.Unmarshal(trimmed, &req); err == nil {
+			printerName = strings.TrimSpace(req.Printer)
+			port = strings.TrimSpace(req.Port)
+			docTitle = strings.TrimSpace(req.Title)
+			if req.URI != "" && printerName == "" {
+				if qName, err := utils.WindowsQueueName(req.URI); err == nil {
+					printerName = qName
+				}
+			}
+			if req.IsBase64 {
+				decoded, err := base64.StdEncoding.DecodeString(req.Data)
+				if err != nil {
+					return fiber.NewError(fiber.StatusBadRequest, "format base64 tidak valid: "+err.Error())
+				}
+				data = decoded
+			} else {
+				data = []byte(req.Data)
+			}
+		}
+	}
+
+	if len(data) == 0 {
+		data = body
+		if printerName == "" {
+			printerName = strings.TrimSpace(c.Get("X-RSISA-Printer-Name"))
+		}
+		if port == "" {
+			port = strings.TrimSpace(c.Get("X-RSISA-Printer-Port"))
+		}
+		if docTitle == "" {
+			docTitle = strings.TrimSpace(c.Get("X-RSISA-Doc-Title"))
+		}
+		if rawURI := strings.TrimSpace(c.Get("X-RSISA-Printer-URI")); rawURI != "" && printerName == "" {
+			if qName, err := utils.WindowsQueueName(rawURI); err == nil {
+				printerName = qName
+			}
+		}
+	}
+
+	if docTitle == "" {
+		docTitle = "Aquila USB Print"
+	}
+
+	if port == "" && printerName == "" {
+		// JALAN PINTAS PLUG & PLAY:
+		// Jika web klien tidak mengirim nama printer atau port, otomatis cari printer thermal atau default printer yang sedang aktif!
+		ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
+		defer cancel()
+		printers, _ := listPrintersForPlatform(ctx)
+		for _, p := range printers {
+			if p.State == "ready" && (p.PrinterType == "thermal" || IsThermalOrPOS(p.Name, p.Driver, p.Port) || p.IsDefault) {
+				printerName = p.Name
+				break
+			}
+		}
+		if printerName == "" && len(printers) > 0 {
+			printerName = printers[0].Name
+		}
+		if printerName == "" {
+			return fiber.NewError(fiber.StatusBadRequest, "tidak ada printer yang terdeteksi pada PC ini. Hubungkan printer USB terlebih dahulu.")
+		}
+	}
+
+	var err error
+	targetDesc := printerName
+	// JALAN PINTAS: Abaikan pemaksaan port fisik, selalu arahkan langsung ke Spooler Antrean Windows (PnP Sejati)
+	err = utils.PrintRawToWindowsPrinter(printerName, data, docTitle)
+	if err != nil && port != "" {
+		err = utils.PrintRawToSerialPort(port, data)
+	}
+
+	if err != nil {
+		s.logf("ERROR", "POST /printers/raw gagal ke %s: %v", targetDesc, err)
+		return fiber.NewError(fiber.StatusBadGateway, "gagal mengirim data raw ke printer USB: "+err.Error())
+	}
+
+	s.logf("INFO", "POST /printers/raw -> %s 202 (%d bytes)", targetDesc, len(data))
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
+		"message":    "Data RAW/ESC-POS berhasil dikirim ke printer USB.",
+		"printer":    printerName,
+		"port":       port,
+		"bytes_sent": len(data),
+	})
 }

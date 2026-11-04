@@ -14,7 +14,7 @@ import (
 	"github.com/RSISA-Semarang/rsisa-print-server/internal/printserver"
 )
 
-const appVersion = "1.0.5"
+const appVersion = "2.1.0"
 
 // AppSettings adalah preferensi aplikasi desktop (terpisah dari
 // print-server.json agar file konfigurasi print server tetap bersih).
@@ -433,6 +433,62 @@ func (c *Core) PrinterCount() int {
 		return 0
 	}
 	return len(printers)
+}
+
+// Printers mengembalikan seluruh antrean printer yang terdeteksi pada PC ini.
+func (c *Core) Printers() ([]printserver.LocalPrinter, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return printserver.ListPrinters(ctx)
+}
+
+// TestPrinter mengirim dokumen tes cetak ke printer tertentu dari aplikasi desktop.
+func (c *Core) TestPrinter(name, uri, mode string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	c.log("INFO", fmt.Sprintf("mengirim uji cetak (%s) ke %s", mode, name))
+	err := printserver.TestPrinterFromDesktop(ctx, name, uri, mode)
+	if err != nil {
+		c.log("ERROR", fmt.Sprintf("uji cetak ke %s gagal: %v", name, err))
+		return err
+	}
+	c.log("INFO", fmt.Sprintf("uji cetak ke %s berhasil dikirim", name))
+	return nil
+}
+
+// SetPrinterPort mengubah port antrean printer di Windows dari aplikasi desktop.
+func (c *Core) SetPrinterPort(printerName, portName string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	c.log("INFO", fmt.Sprintf("memindahkan port printer %s ke %s", printerName, portName))
+	err := printserver.SetPrinterPortFromDesktop(ctx, printerName, portName)
+	if err != nil {
+		c.log("ERROR", fmt.Sprintf("gagal memindahkan port %s: %v", printerName, err))
+		return err
+	}
+	c.log("INFO", fmt.Sprintf("port printer %s berhasil dipindahkan ke %s", printerName, portName))
+	return nil
+}
+
+// ClearPrinterQueue membersihkan antrean cetak macet untuk printer tertentu.
+func (c *Core) ClearPrinterQueue(printerName string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	c.log("INFO", fmt.Sprintf("membersihkan antrean cetak %s", printerName))
+	err := printserver.ClearPrinterQueueFromDesktop(ctx, printerName)
+	if err != nil {
+		c.log("ERROR", fmt.Sprintf("gagal membersihkan antrean %s: %v", printerName, err))
+		return err
+	}
+	c.log("INFO", fmt.Sprintf("antrean cetak %s berhasil dibersihkan", printerName))
+	return nil
+}
+
+// PrinterPorts mengembalikan seluruh nama port printer yang terdaftar di Windows.
+func (c *Core) PrinterPorts() ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return printserver.ListPrinterPortsFromDesktop(ctx)
 }
 
 // Shutdown mematikan layanan sebelum aplikasi ditutup.

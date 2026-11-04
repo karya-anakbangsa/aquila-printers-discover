@@ -215,10 +215,13 @@ Muat dengan `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/id.rsisa.pr
 ## API
 
 - `GET http://127.0.0.1:17891/health` — status layanan.
-- `GET http://127.0.0.1:17891/printers` — daftar antrean printer OS, status, driver, port, dan printer default.
-- `GET http://127.0.0.1:17891/printers/discover` — printer jaringan yang mengiklankan IPP/IPPS lewat Bonjour/mDNS.
-- `POST http://127.0.0.1:17891/printers/test` — JSON `{"name":"nama antrean","paper":"A4","mode":"bw"}` untuk mencetak lewat antrean OS, atau sertakan `uri` printer IPP yang mendukung PDF. Untuk CF, LABEL, atau LAINNYA, sertakan `width_mm` dan `height_mm`.
-- `POST http://127.0.0.1:17891/print/{document_type}?module_code={module}` — body PDF mentah, `Content-Type: application/pdf`.
+- `GET http://127.0.0.1:17891/printers` — daftar antrean printer OS, status, driver, port, `connection_type` (usb, network, serial, virtual), dan printer default.
+- `GET http://127.0.0.1:17891/printers/discover` — printer jaringan Wi-Fi/LAN yang mengiklankan IPP/IPPS lewat Bonjour/mDNS.
+- `GET http://127.0.0.1:17891/printers/usb` — daftar antrean printer yang terhubung via USB/Serial dan daftar port COM serial aktif.
+- `GET http://127.0.0.1:17891/printers/ports` — daftar port serial (COM) yang tersedia dari sistem operasi.
+- `POST http://127.0.0.1:17891/printers/raw` (atau `/print-raw`) — mengirim data RAW/ESC-POS/TSPL/ZPL langsung ke antrean printer USB via Win32 Spooler API (<1ms) atau direct COM port. Menerima JSON `{"printer":"POS58","data":"...","is_base64":false}` atau stream biner mentah.
+- `POST http://127.0.0.1:17891/printers/test` — JSON `{"name":"nama antrean","paper":"A4","mode":"bw"}` untuk mencetak lewat antrean OS, atau sertakan `uri` printer IPP. Mode `"raw"` mencetak struk uji coba ESC/POS langsung ke printer USB thermal.
+- `POST http://127.0.0.1:17891/print/{document_type}?module_code={module}` — body PDF mentah (`Content-Type: application/pdf`) untuk printer Wi-Fi/driver OS, atau data mentah dengan header `X-RSISA-Raw: true` untuk printer USB/kasir.
 
 PDF tidak dikirim ke TCP 9100: beberapa printer mencetak byte `%PDF` sebagai banyak halaman karakter acak. Di macOS/Linux, pilih antrean OS yang ditemukan di halaman pengaturan (contoh `ipp://127.0.0.1:631/printers/EPSON_L5190_Series`). Alamat `127.0.0.1` merujuk ke antrean CUPS di PC ini, bukan IP jaringan printer; Aquila mengirim PDF melalui utilitas `lp` ke antrean OS. CUPS meneruskan dokumen ke alamat perangkat yang dikonfigurasi pada sistem operasi.
 

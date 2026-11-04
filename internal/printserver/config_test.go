@@ -140,11 +140,19 @@ func TestEnsureAndSaveConfig(t *testing.T) {
 func TestSaveConfigRejectsInvalid(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "print-server.json")
 	cfg := DefaultConfig()
-	cfg.Listen = "0.0.0.0:17891"
+	cfg.Listen = "8.8.8.8:17891"
 	if err := SaveConfig(path, cfg); err == nil {
-		t.Fatal("listen non-localhost seharusnya ditolak")
+		t.Fatal("listen IP publik internet seharusnya ditolak")
 	}
 	if _, err := os.Stat(path); err == nil {
 		t.Fatal("file tidak boleh tertulis bila konfigurasi tidak valid")
+	}
+
+	// Pastikan 0.0.0.0 dan IP LAN privat diizinkan untuk Server Printer Terpusat LAN
+	for _, validListen := range []string{"0.0.0.0:17891", "192.168.1.141:17891", "10.0.0.5:17891", "127.0.0.1:17891"} {
+		cfg.Listen = validListen
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("listen %s seharusnya valid untuk LAN/local: %v", validListen, err)
+		}
 	}
 }
