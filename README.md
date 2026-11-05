@@ -214,6 +214,10 @@ Untuk auto-start, buat file `~/Library/LaunchAgents/id.rsisa.print-server.plist`
 
 Muat dengan `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/id.rsisa.print-server.plist`.
 
+Untuk berbagi antrean PC2 ke PC1 melalui LAN, pasang print server pada kedua PC dan isi  yang sama pada  keduanya. Gunakan token acak yang unik untuk jaringan tersebut, minimal 24 karakter. Di PC2 atur  menjadi ; PC1 tetap . Restart layanan setelah mengubah JSON. Batasi firewall PC2 ke jaringan internal tepercaya.
+
+Di Farmasi, buka pengaturan printer, masukkan IP PC2 pada **Printer pada PC lain**, cari, pilih antrean, dan daftarkan.
+
 ## API
 
 - `GET http://127.0.0.1:17891/health` — status layanan.

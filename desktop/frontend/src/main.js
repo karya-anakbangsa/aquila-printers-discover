@@ -1036,7 +1036,7 @@ function renderMainShell() {
             <input id="listen-port" placeholder="17891" inputmode="numeric" style="width:110px" aria-label="Port" />
             <button class="primary" data-action="save-listen">Simpan</button>
           </div>
-          <p class="muted" style="margin-top:8px">Gunakan 127.0.0.1 untuk akses dari PC ini saja, atau 0.0.0.0 / IP LAN PC (contoh: 192.168.1.141) agar dapat diakses terpusat oleh PC lain di jaringan LAN. Layanan otomatis dimuat ulang bila sedang berjalan.</p>
+          <p class="muted" style="margin-top:8px">Port harus tetap <code>17891</code> agar aplikasi farmasi dapat terhubung. Gunakan <code>127.0.0.1</code> untuk akses dari PC ini saja, atau <code>0.0.0.0</code> / IP LAN PC (contoh: <code>192.168.1.141</code>) agar dapat diakses oleh PC lain di jaringan LAN dengan mengatur token LAN pada konfigurasi. Layanan otomatis dimuat ulang bila sedang berjalan.</p>
           <div class="banner" id="settings-banner" style="margin-top:10px"></div>
         </div>
         <div class="card">

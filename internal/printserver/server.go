@@ -3,11 +3,13 @@ package printserver
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/url"
 	"os"
 	"os/exec"
@@ -53,10 +55,12 @@ func New(cfg Config, events EventLog) *Server {
 		StrictRouting: true,
 	})
 	app.Use(server.corsMiddleware)
+	app.Use(server.lanAuthMiddleware)
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok", "service": "rsisa-print-server"})
 	})
 	app.Get("/printers", listLocalPrinters)
+	app.Get("/hosts/:ip/printers", server.listHostPrinters)
 	app.Get("/printers/discover", discoverNetworkPrinters)
 	app.Get("/printers/usb", listUSBPrinters)
 	app.Get("/printers/ports", listActivePorts)
@@ -74,7 +78,14 @@ func New(cfg Config, events EventLog) *Server {
 func (s *Server) App() *fiber.App { return s.app }
 
 // Listen menjalankan server pada alamat yang diberikan dan memblokir.
-func (s *Server) Listen(addr string) error { return s.app.Listen(addr) }
+func (s *Server) Listen(addr string) error {
+	cfg := s.Config()
+	cfg.Listen = addr
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	return s.app.Listen(addr)
+}
 
 // Shutdown menghentikan server secara graceful.
 func (s *Server) Shutdown(ctx context.Context) error { return s.app.ShutdownWithContext(ctx) }
@@ -125,7 +136,27 @@ func (s *Server) submitPDF(c *fiber.Ctx) error {
 	docType := strings.TrimSpace(c.Params("documentType"))
 	var route RouteConfig
 	var printer PrinterConfig
-	if rawURI := strings.TrimSpace(c.Get("X-RSISA-Printer-URI")); rawURI != "" {
+	if queue := strings.TrimSpace(c.Get("X-RSISA-Queue")); queue != "" {
+		if strings.ContainsAny(queue, "\r\n\x00") {
+			return fiber.NewError(fiber.StatusBadRequest, "nama antrean printer tidak valid")
+		}
+		switch runtime.GOOS {
+		case "windows":
+			printer = PrinterConfig{Name: queue, URI: utils.WindowsQueueURI(queue)}
+		case "darwin", "linux":
+			printer = PrinterConfig{Name: queue, URI: "ipp://127.0.0.1:631/printers/" + url.PathEscape(queue)}
+		default:
+			return fiber.NewError(fiber.StatusNotImplemented, "antrean printer tidak didukung pada OS ini")
+		}
+		route = RouteConfig{Copies: 1, Media: strings.TrimSpace(c.Get("X-RSISA-Media"))}
+		if rawCopies := strings.TrimSpace(c.Get("X-RSISA-Copies")); rawCopies != "" {
+			copies, err := strconv.Atoi(rawCopies)
+			if err != nil || copies < 1 || copies > 20 {
+				return fiber.NewError(fiber.StatusBadRequest, "jumlah salinan harus antara 1 dan 20")
+			}
+			route.Copies = copies
+		}
+	} else if rawURI := strings.TrimSpace(c.Get("X-RSISA-Printer-URI")); rawURI != "" {
 		uri, err := utils.NormalizePrinterURI(rawURI)
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
@@ -175,7 +206,13 @@ func (s *Server) submitPDF(c *fiber.Ctx) error {
 	}
 	ctx, cancel := context.WithTimeout(c.UserContext(), 50*time.Second)
 	defer cancel()
-	ippJobID, err := submitPrinterPDF(ctx, printer.URI, pdf, docType, "farmasi", route.Copies, route.Media)
+	var ippJobID int
+	var err error
+	if host, queue, ok := remoteQueue(printer.URI); ok {
+		err = s.forwardHostPDF(ctx, host, queue, pdf, docType, route.Copies, route.Media)
+	} else {
+		ippJobID, err = submitPrinterPDF(ctx, printer.URI, pdf, docType, "farmasi", route.Copies, route.Media)
+	}
 	if err != nil {
 		s.logf("ERROR", "POST /print/%s gagal ke %s: %v", docType, printer.Name, err)
 		var ippErr *utils.IPPSubmissionError
@@ -221,6 +258,12 @@ func listLocalPrinters(c *fiber.Ctx) error {
 	}
 	if printers == nil {
 		printers = []LocalPrinter{}
+	}
+	hostname, _ := os.Hostname()
+	ownerIP := c.Context().LocalIP().String()
+	for i := range printers {
+		printers[i].OwnerPC = hostname
+		printers[i].OwnerIP = ownerIP
 	}
 	return c.JSON(fiber.Map{"data": printers, "platform": runtime.GOOS})
 }
@@ -374,7 +417,12 @@ func (s *Server) testLocalPrinter(c *fiber.Ctx) error {
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, "gagal membuat halaman tes: "+err.Error())
 		}
-		ippJobID, err := submitPrinterPDF(ctx, uri, pdf, "Tes printer", "rsisa", 1, "")
+		var ippJobID int
+		if host, queue, ok := remoteQueue(uri); ok {
+			err = s.forwardHostPDF(ctx, host, queue, pdf, "test", 1, "")
+		} else {
+			ippJobID, err = submitPrinterPDF(ctx, uri, pdf, "Tes printer", "rsisa", 1, "")
+		}
 		if err != nil {
 			s.logf("ERROR", "tes printer %s gagal: %v", request.Name, err)
 			var ippErr *utils.IPPSubmissionError
@@ -692,7 +740,7 @@ func (s *Server) corsMiddleware(c *fiber.Ctx) error {
 		c.Set("Vary", "Origin")
 	}
 	c.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	c.Set("Access-Control-Allow-Headers", "Content-Type, X-RSISA-Printer-Name, X-RSISA-Printer-URI, X-RSISA-Printer-Port, X-RSISA-Doc-Title, X-RSISA-Raw, X-RSISA-Copies, X-RSISA-Media")
+	c.Set("Access-Control-Allow-Headers", "Content-Type, X-RSISA-Printer-Name, X-RSISA-Printer-URI, X-RSISA-Printer-Port, X-RSISA-Doc-Title, X-RSISA-Raw, X-RSISA-Copies, X-RSISA-Media, X-RSISA-Queue, X-RSISA-LAN-Token")
 	if c.Method() == fiber.MethodOptions {
 		if strings.EqualFold(c.Get("Access-Control-Request-Private-Network"), "true") {
 			c.Set("Access-Control-Allow-Private-Network", "true")
@@ -947,4 +995,25 @@ func (s *Server) submitRaw(c *fiber.Ctx) error {
 		"port":       port,
 		"bytes_sent": len(data),
 	})
+}
+
+func (s *Server) lanAuthMiddleware(c *fiber.Ctx) error {
+	s.mu.RLock()
+	token := s.cfg.LANAccessToken
+	s.mu.RUnlock()
+	ip := net.ParseIP(c.Context().RemoteIP().String())
+	if c.Path() == "/health" && ip != nil && ip.IsPrivate() {
+		return c.Next()
+	}
+	if !lanAccessAllowed(ip, token, c.Get("X-RSISA-LAN-Token")) {
+		return fiber.NewError(fiber.StatusUnauthorized, "akses print server LAN tidak diizinkan")
+	}
+	return c.Next()
+}
+
+func lanAccessAllowed(ip net.IP, token, supplied string) bool {
+	if token == "" || (ip != nil && ip.IsLoopback()) {
+		return true
+	}
+	return ip != nil && ip.IsPrivate() && len(token) >= 24 && subtle.ConstantTimeCompare([]byte(supplied), []byte(token)) == 1
 }
