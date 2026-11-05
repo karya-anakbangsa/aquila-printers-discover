@@ -47,6 +47,14 @@ const MAX_LOG_LINES = 200;
 const isPopup = new URLSearchParams(location.search).has("popup");
 
 // State ringkas di memori; hanya objek kecil yang disimpan, tanpa cache besar.
+// Ikon SVG vektor modern (menggantikan emoji untuk konsistensi di Windows, Mac, dan Linux)
+const ICONS = {
+  printer: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>`,
+  copy: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`,
+  search: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>`,
+  trash: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`,
+};
+
 const state = {
   service: null,
   config: null,
@@ -334,14 +342,14 @@ function renderPrinters(error = null) {
           <!-- Aksi Cepat & Uji Cetak Dinamis (Plug & Play) -->
           <div class="printer-actions" style="margin-top:10px">
             <button class="primary" data-action="test-auto-printer" data-index="${idx}">
-              🖨️ Tes Cetak (${isThermal ? 'Struk Thermal' : 'Dokumen'})
+              ${ICONS.printer} Tes Cetak (${isThermal ? 'Struk Thermal' : 'Dokumen'})
             </button>
             ${
               !isThermal
                 ? `<button data-action="test-raw-printer" data-index="${idx}" title="Uji kirim byte mentah">Tes Mode RAW</button>`
                 : `<button class="secondary" data-action="test-doc-printer" data-index="${idx}" title="Uji kirim format Windows GDI">Tes Cetak Dokumen</button>`
             }
-            <button class="icon-btn danger" data-action="clear-printer-queue" data-index="${idx}" title="Hapus seluruh dokumen macet di printer ini">Bersihkan Antrean</button>
+            <button class="icon-btn danger" data-action="clear-printer-queue" data-index="${idx}" title="Hapus seluruh dokumen macet di printer ini">${ICONS.trash} Bersihkan Antrean</button>
           </div>
         </div>
       `;
@@ -432,12 +440,11 @@ function renderNetworkPrinters(error = null) {
           </div>
           <div class="printer-actions" style="margin-top:10px">
             <button class="primary" data-action="test-network-printer" data-index="${idx}">
-              🖨️ Tes Cetak (IPP Direct)
+              ${ICONS.printer} Tes Cetak Langsung (IPP)
             </button>
-            <button data-action="copy-printer-uri" data-index="${idx}" title="Salin URI IPP untuk didaftarkan ke web farmasi">
-              📋 Salin URI
+            <button data-action="copy-printer-uri" data-index="${idx}" title="Salin URI printer untuk didaftarkan ke aplikasi RSISA Farmasi">
+              ${ICONS.copy} Salin Alamat URI
             </button>
-            ${p.ip ? `<button data-action="open-printer-ip" data-ip="${esc(p.ip)}" title="Buka web admin printer">🌐 Web Admin</button>` : ""}
           </div>
         </div>
       `;
@@ -826,9 +833,9 @@ function bindEvents() {
         const idx = parseInt(btn.dataset.index, 10);
         const p = state.networkPrinters && state.networkPrinters[idx];
         if (!p) break;
-        const oldText = btn.textContent;
+        const oldHTML = btn.innerHTML;
         btn.disabled = true;
-        btn.textContent = "Mengirim…";
+        btn.innerHTML = `${ICONS.printer} Mengirim…`;
         hideBanner("#network-printer-banner");
         try {
           await TestPrinter(p.name, p.uri, "bw");
@@ -845,7 +852,7 @@ function bindEvents() {
           );
         } finally {
           btn.disabled = false;
-          btn.textContent = oldText;
+          btn.innerHTML = oldHTML;
         }
         break;
       }
@@ -864,13 +871,6 @@ function bindEvents() {
           );
         } catch (err) {
           showBanner("#network-printer-banner", `Gagal menyalin: ${errorMessage(err)}`, false);
-        }
-        break;
-      }
-      case "open-printer-ip": {
-        const ip = btn.dataset.ip;
-        if (ip) {
-          window.open(`http://${ip}`, "_blank");
         }
         break;
       }
@@ -955,9 +955,9 @@ function bindEvents() {
         let mode = "auto";
         if (action === "test-raw-printer") mode = "raw";
         else if (action === "test-doc-printer") mode = "bw";
-        const oldText = btn.textContent;
+        const oldHTML = btn.innerHTML;
         btn.disabled = true;
-        btn.textContent = "Mengirim…";
+        btn.innerHTML = `${ICONS.printer} Mengirim…`;
         hideBanner("#printer-banner");
         try {
           // Tentukan mode dinamis: jika thermal gunakan raw (ESC/POS), jika printer biasa gunakan bw (GDI Dokumen)
@@ -1000,7 +1000,7 @@ function bindEvents() {
           }
         } finally {
           btn.disabled = false;
-          btn.textContent = oldText;
+          btn.innerHTML = oldHTML;
           GetLogs().then((logs) => {
             const view = $("#log-view");
             if (view && logs) {
@@ -1141,7 +1141,7 @@ function renderMainShell() {
         <div class="card">
           <div class="section-heading">
             <h2>Daftar Printer Antrean OS</h2>
-            <button data-action="refresh-printers">Deteksi Ulang</button>
+            <button data-action="refresh-printers">${ICONS.search} Deteksi Ulang</button>
           </div>
           <p class="muted">Antrean printer yang terpasang pada PC ini (USB, Serial, Wi-Fi, dan antrean OS). Printer berstatus <b>Ready</b> dapat langsung digunakan dan dipilih oleh aplikasi web dari LAN.</p>
           <div class="printer-stats" id="printer-stats" style="margin-top:12px"></div>
@@ -1154,7 +1154,7 @@ function renderMainShell() {
         <div class="card" style="margin-top:16px">
           <div class="section-heading">
             <h2>Pencarian Jaringan (Bonjour / mDNS)</h2>
-            <button data-action="refresh-network-printers" class="secondary">🔍 Pindai Jaringan</button>
+            <button data-action="refresh-network-printers" class="secondary">${ICONS.search} Pindai Jaringan</button>
           </div>
           <p class="muted">Printer jaringan IPP/IPPS yang terdeteksi otomatis lewat protokol Bonjour/mDNS di subnet Wi-Fi/LAN lokal. Printer ini dapat langsung diuji cetak atau disalin URI-nya untuk didaftarkan ke sistem RSISA Farmasi.</p>
           <div class="printer-stats" id="network-printer-stats" style="margin-top:12px"></div>

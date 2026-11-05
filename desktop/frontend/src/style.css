@@ -716,3 +716,22 @@ select:focus {
   padding: 5px 11px;
   font-size: 0.8rem;
 }
+
+
+/* SVG Icon styling for buttons */
+.btn-icon {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
