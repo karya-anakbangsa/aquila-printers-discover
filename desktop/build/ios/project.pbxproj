@@ -19,7 +19,7 @@
 /* Begin PBXFileReference section */
 		C0DEBEEF0000000000000002 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		C0DEBEEF0000000000000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		C0DEBEEF0000000000000004 /* Aquila.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Aquila.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0DEBEEF0000000000000004 /* RSISA Printer Server.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "RSISA Printer Server.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0DEBEEF0000000000000101 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		C0DEBEEF0000000000000102 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		C0DEBEEF0000000000000103 /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
@@ -42,7 +42,7 @@
 		C0DEBEEF0000000000000020 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				C0DEBEEF0000000000000004 /* Aquila.app */,
+				C0DEBEEF0000000000000004 /* RSISA Printer Server.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -73,9 +73,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		C0DEBEEF0000000000000040 /* Aquila */ = {
+		C0DEBEEF0000000000000040 /* RSISA Printer Server */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = C0DEBEEF0000000000000070 /* Build configuration list for PBXNativeTarget "Aquila" */;
+			buildConfigurationList = C0DEBEEF0000000000000070 /* Build configuration list for PBXNativeTarget "RSISA Printer Server" */;
 			buildPhases = (
 				C0DEBEEF0000000000000055 /* Prebuild: Wails Go Archive */,
 				C0DEBEEF0000000000000050 /* Sources */,
@@ -85,9 +85,9 @@
 			);
 			dependencies = (
 			);
-			name = "Aquila";
-			productName = "Aquila";
-			productReference = C0DEBEEF0000000000000004 /* Aquila.app */;
+			name = "RSISA Printer Server";
+			productName = "RSISA Printer Server";
+			productReference = C0DEBEEF0000000000000004 /* RSISA Printer Server.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -97,7 +97,7 @@
 			isa = PBXProject;
 			attributes = {
 				LastUpgradeCheck = 1500;
-				ORGANIZATIONNAME = "Aquila";
+				ORGANIZATIONNAME = "CV ANAK BANGSA";
 				TargetAttributes = {
 					C0DEBEEF0000000000000040 = {
 						CreatedOnToolsVersion = 15.0;
@@ -116,7 +116,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				C0DEBEEF0000000000000040 /* Aquila */,
+				C0DEBEEF0000000000000040 /* RSISA Printer Server */,
 			);
 		};
 /* End PBXProject section */
@@ -181,7 +181,7 @@
 					"-ObjC",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.aquila.printserver";
-				PRODUCT_NAME = "Aquila";
+				PRODUCT_NAME = "RSISA Printer Server";
 				CODE_SIGNING_ALLOWED = NO;
 				SDKROOT = iphoneos;
 			};
@@ -197,7 +197,7 @@
 					"-ObjC",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.aquila.printserver";
-				PRODUCT_NAME = "Aquila";
+				PRODUCT_NAME = "RSISA Printer Server";
 				CODE_SIGNING_ALLOWED = NO;
 				SDKROOT = iphoneos;
 			};
@@ -206,7 +206,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		C0DEBEEF0000000000000070 /* Build configuration list for PBXNativeTarget "Aquila" */ = {
+		C0DEBEEF0000000000000070 /* Build configuration list for PBXNativeTarget "RSISA Printer Server" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C0DEBEEF0000000000000090 /* Debug */,

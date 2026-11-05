@@ -7,9 +7,9 @@
     <key>CFBundleIdentifier</key>
     <string>com.aquila.printserver</string>
     <key>CFBundleName</key>
-    <string>Aquila</string>
+    <string>RSISA Printer Server</string>
     <key>CFBundleDisplayName</key>
-    <string>Aquila</string>
+    <string>RSISA Printer Server</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -49,7 +49,7 @@
     
     
     <key>NSHumanReadableCopyright</key>
-    <string>(c) 2026, Aquila</string>
+    <string>(c) 2026, CV ANAK BANGSA</string>
     
     
     <key>CFBundleGetInfoString</key>

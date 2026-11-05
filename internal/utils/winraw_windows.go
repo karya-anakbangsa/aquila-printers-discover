@@ -57,7 +57,7 @@ func PrintRawWin32(printerName string, data []byte, docTitle string) error {
 	defer procClosePrinter.Call(uintptr(hPrinter))
 
 	if docTitle == "" {
-		docTitle = "Aquila USB Ticket"
+		docTitle = "RSISA Printer Server USB Ticket"
 	}
 	docName, _ := syscall.UTF16PtrFromString(docTitle)
 	dataType, _ := syscall.UTF16PtrFromString("RAW")
@@ -108,7 +108,7 @@ func PrintRawPowerShellFallback(printerName string, data []byte, docTitle string
 	defer os.Remove(tempFile)
 
 	if docTitle == "" {
-		docTitle = "Aquila USB Ticket"
+		docTitle = "RSISA Printer Server USB Ticket"
 	}
 
 	psScript := fmt.Sprintf(`

@@ -100,16 +100,16 @@ func TestUSBEndpoints(t *testing.T) {
 		t.Errorf("POST /printers/raw empty status = %d, want 400", respRawEmpty.StatusCode)
 	}
 
-	// Test POST /printers/raw missing printer target
-	rawJSON := `{"data":"test data"}`
+	// Test POST /printers/raw with an unavailable target so the test cannot print to a real queue.
+	rawJSON := `{"printer":"__rsisa_test_missing_printer__","data":"test data"}`
 	reqRawNoTarget := httptest.NewRequest("POST", "/printers/raw", strings.NewReader(rawJSON))
 	reqRawNoTarget.Header.Set("Content-Type", "application/json")
 	respRawNoTarget, err := server.App().Test(reqRawNoTarget)
 	if err != nil {
 		t.Fatalf("POST /printers/raw no target failed: %v", err)
 	}
-	if respRawNoTarget.StatusCode != 400 {
-		t.Errorf("POST /printers/raw without target status = %d, want 400", respRawNoTarget.StatusCode)
+	if respRawNoTarget.StatusCode != 502 {
+		t.Errorf("POST /printers/raw with unavailable printer status = %d, want 502", respRawNoTarget.StatusCode)
 	}
 
 	// Test POST /printers/raw invalid base64

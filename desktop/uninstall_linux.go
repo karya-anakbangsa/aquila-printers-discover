@@ -18,7 +18,7 @@ func prepareUninstall(executable string) (uninstallPlan, error) {
 		manager, argument = "rpm", "-e"
 	}
 	if manager == "" {
-		return uninstallPlan{}, fmt.Errorf("Aquila ini tidak terdaftar sebagai paket deb/rpm. Untuk versi portable, keluar dari Aquila lalu hapus file %s", executable)
+		return uninstallPlan{}, fmt.Errorf("RSISA Printer Server ini tidak terdaftar sebagai paket deb/rpm. Untuk versi portable, keluar dari aplikasi lalu hapus file %s", executable)
 	}
 	managerPath, err := exec.LookPath(manager)
 	if err != nil {
@@ -26,10 +26,10 @@ func prepareUninstall(executable string) (uninstallPlan, error) {
 	}
 	pkexec, err := exec.LookPath("pkexec")
 	if err != nil {
-		return uninstallPlan{}, fmt.Errorf("dialog izin administrator tidak tersedia. Keluar dari Aquila lalu jalankan di terminal: sudo %s %s aquila", manager, argument)
+		return uninstallPlan{}, fmt.Errorf("dialog izin administrator tidak tersedia. Keluar dari aplikasi lalu jalankan di terminal: sudo %s %s aquila", manager, argument)
 	}
 	return uninstallPlan{
-		description:      "Hapus paket Aquila melalui pengelola paket Linux? Sistem akan meminta izin administrator.",
+		description:      "Hapus RSISA Printer Server melalui pengelola paket Linux? Sistem akan meminta izin administrator.",
 		disableAutostart: true,
 		run: func() error {
 			output, err := exec.Command(pkexec, managerPath, argument, "aquila").CombinedOutput()

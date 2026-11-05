@@ -35,8 +35,8 @@ func main() {
 	var ready atomic.Bool
 
 	app := application.New(application.Options{
-		Name:         "Aquila",
-		Description:  "Panel kendali print server lokal Aquila",
+		Name:         "RSISA Printer Server",
+		Description:  "Panel kendali server printer lokal RSISA",
 		ErrorHandler: startupErrorHandler(),
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: "com.aquila.printserver.v21",
@@ -65,7 +65,7 @@ func main() {
 	// pengguna langsung melihat konfigurasi yang dibuatkan.
 	mainWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "main",
-		Title:            "Aquila v2.1 — Print Server",
+		Title:            "RSISA Printer Server",
 		Width:            960,
 		Height:           660,
 		MinWidth:         720,
@@ -78,7 +78,7 @@ func main() {
 	// Popup ringkas untuk klik kiri pada tray.
 	popup := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "popup",
-		Title:            "Aquila",
+		Title:            "RSISA Printer Server",
 		Width:            320,
 		Height:           380,
 		Frameless:        true,

@@ -91,7 +91,7 @@ $doc.add_QueryPageSettings({
     } else {
       $width = [int][math]::Max(1, [math]::Round($page.Size.Width * 100 / 96))
       $height = [int][math]::Max(1, [math]::Round($page.Size.Height * 100 / 96))
-      $e.PageSettings.PaperSize = [System.Drawing.Printing.PaperSize]::new('Aquila PDF', $width, $height)
+      $e.PageSettings.PaperSize = [System.Drawing.Printing.PaperSize]::new('RSISA Printer Server PDF', $width, $height)
     }
     $e.PageSettings.Margins = [System.Drawing.Printing.Margins]::new(0, 0, 0, 0)
   } finally { $page.Dispose() }

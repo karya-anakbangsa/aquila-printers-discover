@@ -61,7 +61,7 @@ func newTrayUI(app *application.App, api *AquilaService, popup *application.Webv
 	})
 
 	t.tray.SetIcon(t.iconIdle)
-	t.tray.SetTooltip("Aquila")
+	t.tray.SetTooltip("RSISA Printer Server")
 	t.tray.SetMenu(menu)
 	t.tray.AttachWindow(popup)
 	t.tray.WindowOffset(8)
@@ -100,7 +100,7 @@ func (t *trayUI) update(state ServiceState) {
 	if icon != nil {
 		t.tray.SetIcon(icon)
 	}
-	t.tray.SetTooltip("Aquila — " + statusText)
+	t.tray.SetTooltip("RSISA Printer Server — " + statusText)
 	application.InvokeAsync(func() {
 		t.status.SetLabel(statusText)
 		t.toggle.SetLabel(toggleText)

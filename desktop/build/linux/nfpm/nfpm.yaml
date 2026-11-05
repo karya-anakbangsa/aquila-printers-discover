@@ -6,14 +6,14 @@
 name: "aquila"
 arch: ${GOARCH}
 platform: "linux"
-version: "1.0.7"
+version: "1.0.8"
 section: "default"
 priority: "extra"
 # Penanggung jawab paket (ganti bila diperlukan).
 maintainer: "CV ANAK BANGSA <dayat.recovery@gmail.com>"
-description: "Panel kendali print server lokal Aquila"
+description: "Panel kendali server printer lokal RSISA"
 vendor: "CV ANAK BANGSA"
-homepage: "https://github.com/karya-anakbangsa/aquila-printers-discover"
+homepage: "https://github.com/RSISA-Semarang/rsisa-printer-server"
 # Repo ini belum punya file LICENSE; ubah bila nanti ditambahkan.
 license: "Proprietary"
 release: "1"

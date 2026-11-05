@@ -63,7 +63,7 @@ ManifestDPIAware true
 !insertmacro MUI_PAGE_INSTFILES # Installing page.
 !insertmacro MUI_PAGE_FINISH # Finished installation page.
 
-!insertmacro MUI_UNPAGE_CONFIRM # Aquila exits before the user starts removal.
+!insertmacro MUI_UNPAGE_CONFIRM # The app exits before the user starts removal.
 !insertmacro MUI_UNPAGE_INSTFILES # Uninstalling page
 
 !insertmacro MUI_LANGUAGE "English" # Set the Language of the installer

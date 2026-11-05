@@ -11,12 +11,12 @@ import (
 
 func startupErrorHandler() func(error) {
 	return func(err error) {
-		showStartupError("Aquila gagal dijalankan:\n\n" + err.Error())
+		showStartupError("RSISA Printer Server gagal dijalankan:\n\n" + err.Error())
 	}
 }
 
 func startupFatal(err error) {
-	showStartupError("Aquila gagal dijalankan:\n\n" + err.Error())
+	showStartupError("RSISA Printer Server gagal dijalankan:\n\n" + err.Error())
 	os.Exit(1)
 }
 
@@ -27,7 +27,7 @@ func startupRecover() {
 }
 
 func reportUnexpectedExit() {
-	showStartupError("Aquila berhenti sebelum jendela dapat ditampilkan. Mohon kirim foto pesan ini kepada pengelola Aquila.")
+	showStartupError("RSISA Printer Server berhenti sebelum jendela dapat ditampilkan. Mohon kirim foto pesan ini kepada pengelola aplikasi.")
 }
 
 func showStartupError(message string) {
@@ -35,6 +35,6 @@ func showStartupError(message string) {
 	if err != nil {
 		return
 	}
-	title, _ := windows.UTF16PtrFromString("Aquila")
+	title, _ := windows.UTF16PtrFromString("RSISA Printer Server")
 	_, _ = windows.MessageBox(0, text, title, windows.MB_OK|windows.MB_ICONERROR|windows.MB_SYSTEMMODAL)
 }

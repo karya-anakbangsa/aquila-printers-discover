@@ -16,31 +16,33 @@ Browser di PC membuka aplikasi klien dari VPS dan mengirim request ke `http://12
 
 Satu source Go dapat dibangun untuk Windows, Linux, dan macOS. Pendeteksian memakai Windows Print Spooler di Windows dan CUPS di Linux/macOS. Halaman tes mengirim uji karakter, font, garis, dan angka ke antrean yang dipilih, termasuk printer jaringan atau USB yang sudah terpasang di OS.
 
-## Aplikasi desktop Aquila
+## Aplikasi desktop RSISA Printer Server
 
-Aquila adalah aplikasi desktop dengan baki sistem (system tray) dan panel kendali yang membungkus print server yang sama. Tersedia sebagai installer untuk macOS (DMG), Windows (setup.exe NSIS), dan Linux (deb/rpm/AppImage). Petunjuk CLI tetap tersedia di bagian berikutnya.
+RSISA Printer Server adalah aplikasi desktop dengan baki sistem (system tray) dan panel kendali yang membungkus print server yang sama. Tersedia sebagai installer untuk macOS (DMG), Windows (setup.exe NSIS), dan Linux (deb/rpm/AppImage). Petunjuk CLI tetap tersedia di bagian berikutnya.
 
 ### Instalasi
 
-1. Pasang aplikasi dari installer. Pada macOS, buka `aquila.dmg` lalu seret **Aquila** ke folder **Applications**.
-2. Saat pertama dijalankan, Aquila otomatis membuat `print-server.json` dengan nilai awal `listen: 127.0.0.1:17891` dan `allowed_origins: ["https://app.example.org", "http://localhost:4200"]`. Tidak perlu menyalin `print-server.example.json` lagi.
+1. Pasang aplikasi dari installer. Pada macOS, buka `RSISA-Printer-Server-macos-universal.dmg` lalu seret **RSISA Printer Server** ke folder **Applications**.
+2. Saat pertama dijalankan, RSISA Printer Server otomatis membuat `print-server.json` dengan nilai awal `listen: 127.0.0.1:17891` dan `allowed_origins: ["https://app.example.org", "http://localhost:4200"]`. Tidak perlu menyalin `print-server.example.json` lagi.
 3. Buka tab **Alamat Diizinkan** dan ganti origin contoh dengan alamat aplikasi klien. Domain, subdomain, dan host dengan port khusus (misal `http://192.168.10.25:8080`) didukung.
 4. Layanan print server dimulai otomatis saat aplikasi dibuka (bisa diubah di tab **Pengaturan**).
 
-Jika muncul pesan bahwa `127.0.0.1:17891` sedang dipakai, tutup Aquila lain yang masih berjalan. Jika port dipakai aplikasi lain, ubah port di **Pengaturan → Alamat Dengarkan** dan sesuaikan URL print server pada aplikasi klien. Aquila tidak menghentikan aplikasi lain atau mengganti port secara otomatis.
+Jika muncul pesan bahwa `127.0.0.1:17891` sedang dipakai, tutup instance RSISA Printer Server lain yang masih berjalan. Jika port dipakai aplikasi lain, ubah port di **Pengaturan → Alamat Dengarkan** dan sesuaikan URL print server pada aplikasi klien. RSISA Printer Server tidak menghentikan aplikasi lain atau mengganti port secara otomatis.
 
 ### Baki sistem
 
 - **Klik kiri** ikon baki: popup ringkas berisi status layanan, tombol mulai/hentikan, dan pintasan ke panel.
 - **Klik kanan** ikon baki: menu status, **Buka Panel**, **Mulai/Hentikan Layanan**, dan **Keluar**.
 - Ikon baki berubah mengikuti keadaan layanan: berhenti, berjalan, atau bermasalah.
-- Menutup jendela panel tidak mematikan layanan; Aquila tetap berjalan di baki sistem.
+- Menutup jendela panel tidak mematikan layanan; RSISA Printer Server tetap berjalan di baki sistem.
 
 ### Lokasi konfigurasi aplikasi desktop
 
 - macOS: `~/Library/Application Support/Aquila/`
 - Windows: `%AppData%\Aquila\`
 - Linux: `~/.config/Aquila/`
+
+Nama folder konfigurasi tetap `Aquila` agar instalasi lama mempertahankan pengaturan saat diperbarui.
 
 Folder ini berisi `print-server.json` (konfigurasi layanan, format sama dengan CLI) dan `app-settings.json` (preferensi aplikasi desktop seperti autostart dan visibilitas jendela). Variabel lingkungan `RSISA_PRINT_SERVER_CONFIG` tetap dihormati untuk menunjuk file konfigurasi di lokasi lain.
 
@@ -70,7 +72,7 @@ GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o dist/rsisa-print
 
 Unggah binary yang sudah diuji ke **Releases** repo terpisah. Aset `dist/` diabaikan oleh Git. Nama binary Unix di aset rilis memiliki akhiran OS/arsitektur; setelah diunduh, ubah namanya menjadi `rsisa-print-server` agar sesuai petunjuk instalasi.
 
-### Build aplikasi desktop Aquila
+### Build aplikasi desktop RSISA Printer Server
 
 Aplikasi desktop dibangun dari folder `desktop/` memakai [Wails v3](https://v3.wails.io). Pastikan `wails3` CLI tersedia (misal `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0`) dan Node.js terpasang untuk membangun frontend:
 
@@ -91,26 +93,26 @@ ditto bin/aquila.app ../output/aquila-1.0.5-testing.app
 cp bin/aquila.dmg ../output/aquila-1.0.5-testing.dmg
 ```
 
-### Uninstall Aquila
+### Uninstall RSISA Printer Server
 
-Pilih **Pengaturan → Uninstall Aquila** dan konfirmasi. macOS memindahkan aplikasi ke Trash; Windows membuka uninstaller NSIS yang menutup proses Aquila agar port server dilepas; Linux menghapus paket deb/rpm setelah izin administrator diberikan. Uninstaller mempertahankan `print-server.json` dan `app-settings.json` agar konfigurasi bisa dipakai kembali saat instal ulang. Untuk versi portable, pilih **Keluar** dari menu klik kanan ikon tray terlebih dahulu, lalu hapus file; menghapus file saat proses masih berjalan tidak menghentikan server.
+Pilih **Pengaturan → Uninstall RSISA Printer Server** dan konfirmasi. macOS memindahkan aplikasi ke Trash; Windows membuka uninstaller NSIS yang menutup proses aplikasi agar port server dilepas; Linux menghapus paket deb/rpm setelah izin administrator diberikan. Uninstaller mempertahankan `print-server.json` dan `app-settings.json` agar konfigurasi bisa dipakai kembali saat instal ulang. Untuk versi portable, pilih **Keluar** dari menu klik kanan ikon tray terlebih dahulu, lalu hapus file; menghapus file saat proses masih berjalan tidak menghentikan server.
 
 ## Rilis dan distribusi installer
 
 ### Lokasi aset rilis
 
-- **GitHub**: halaman **Releases** repo [`karya-anakbangsa/aquila-printers-discover`](https://github.com/karya-anakbangsa/aquila-printers-discover) — inilah "folder assets" yang dibagikan ke pengguna (persis seperti halaman Releases pada umumnya).
+- **GitHub**: halaman **Releases** repo [`RSISA-Semarang/rsisa-printer-server`](https://github.com/RSISA-Semarang/rsisa-printer-server/releases) — inilah "folder assets" yang dibagikan ke pengguna (persis seperti halaman Releases pada umumnya).
 - **Lokal**: folder `dist/` di root repo (diabaikan Git). Bila Anda merakit installer sendiri, salin hasilnya ke `dist/` dengan nama berikut:
 
 ```
 dist/
-├── Aquila-macOS-universal.dmg
-├── Aquila-macOS-universal.pkg
-├── Aquila-windows-amd64-installer.exe
-├── Aquila-windows-amd64.exe
-├── aquila_<versi>_amd64.deb
-├── aquila-<versi>-1.x86_64.rpm
-├── Aquila-linux-amd64.tar.gz
+├── RSISA-Printer-Server-macos-universal.dmg
+├── RSISA-Printer-Server-macos-universal.pkg
+├── RSISA-Printer-Server-windows-amd64-installer.exe
+├── RSISA-Printer-Server-windows-amd64.exe
+├── rsisa-printer-server_<versi>_amd64.deb
+├── rsisa-printer-server-<versi>-1.x86_64.rpm
+├── RSISA-Printer-Server-linux-amd64.tar.gz
 └── checksums.txt
 ```
 
@@ -125,22 +127,22 @@ Langkahnya:
 git status
 
 # 2. Tambahkan remote repo kantor (pakai SSH, bukan HTTPS)
-git remote add origin git@github.com:karya-anakbangsa/aquila-printers-discover.git
+git remote add origin git@github.com:RSISA-Semarang/rsisa-printer-server.git
 
 # 3. Dorong kode ke repo
 git branch -M main
 git push -u origin main
 
-# 4. Buat dan dorong tag versi (contoh: v1.0.7)
-git tag v1.0.7
-git push origin v1.0.7
+# 4. Buat dan dorong tag versi (contoh: v1.0.8)
+git tag v1.0.8
+git push origin v1.0.8
 
 # 5. Tunggu Actions selesai → halaman Releases otomatis terisi semua installer
 ```
 
 Catatan penting:
 
-- **Akses SSH**: remote memakai `git@github.com:...` sehingga memakai kunci SSH `~/.ssh/id_ed25519` yang terautentikasi sebagai akun GitHub Anda. Untuk repo organisasi ini, pastikan akun tersebut (mis. `dayatfadila7`) sudah ditambahkan sebagai **kolaborator** dengan akses *Write* ke `karya-anakbangsa/aquila-printers-discover`. Cek dengan `ssh -T git@github.com` dan `git ls-remote git@github.com:karya-anakbangsa/aquila-printers-discover.git`.
+- **Akses SSH**: remote memakai `git@github.com:...` sehingga memakai kunci SSH `~/.ssh/id_ed25519` yang terautentikasi sebagai akun GitHub Anda. Pastikan akun tersebut memiliki akses *Write* ke `RSISA-Semarang/rsisa-printer-server`. Cek dengan `ssh -T git@github.com` dan `git ls-remote git@github.com:RSISA-Semarang/rsisa-printer-server.git`.
 - **Identitas commit**: konfigurasi git global komputer ini memakai akun pribadi. Bila proyek kantor butuh identitas berbeda, set per-repo saja: `git config user.name "Nama Anda"` dan `git config user.email "email@kantor"`.
 - **Naikkan versi** sebelum men-tag: edit `version` di `desktop/build/config.yml` lalu jalankan `wails3 task common:update:build-assets` dari folder `desktop/` (menyinkronkan Info.plist, NSIS, dan metadata paket). Workflow juga menyamakan versi paket deb/rpm dengan nomor tag otomatis.
 - **Menjalankan workflow tanpa merilis**: jalankan workflow **Release** secara manual (Actions → Release → Run workflow) untuk merakit artefak percobaan tanpa menerbitkan rilis.
@@ -223,7 +225,7 @@ Muat dengan `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/id.rsisa.pr
 - `POST http://127.0.0.1:17891/printers/test` — JSON `{"name":"nama antrean","paper":"A4","mode":"bw"}` untuk mencetak lewat antrean OS, atau sertakan `uri` printer IPP. Mode `"raw"` mencetak struk uji coba ESC/POS langsung ke printer USB thermal.
 - `POST http://127.0.0.1:17891/print/{document_type}?module_code={module}` — body PDF mentah (`Content-Type: application/pdf`) untuk printer Wi-Fi/driver OS, atau data mentah dengan header `X-RSISA-Raw: true` untuk printer USB/kasir.
 
-PDF tidak dikirim ke TCP 9100: beberapa printer mencetak byte `%PDF` sebagai banyak halaman karakter acak. Di macOS/Linux, pilih antrean OS yang ditemukan di halaman pengaturan (contoh `ipp://127.0.0.1:631/printers/EPSON_L5190_Series`). Alamat `127.0.0.1` merujuk ke antrean CUPS di PC ini, bukan IP jaringan printer; Aquila mengirim PDF melalui utilitas `lp` ke antrean OS. CUPS meneruskan dokumen ke alamat perangkat yang dikonfigurasi pada sistem operasi.
+PDF tidak dikirim ke TCP 9100: beberapa printer mencetak byte `%PDF` sebagai banyak halaman karakter acak. Di macOS/Linux, pilih antrean OS yang ditemukan di halaman pengaturan (contoh `ipp://127.0.0.1:631/printers/EPSON_L5190_Series`). Alamat `127.0.0.1` merujuk ke antrean CUPS di PC ini, bukan IP jaringan printer; RSISA Printer Server mengirim PDF melalui utilitas `lp` ke antrean OS. CUPS meneruskan dokumen ke alamat perangkat yang dikonfigurasi pada sistem operasi.
 
 ### Pengecualian sertifikat IPPS untuk pengujian
 
