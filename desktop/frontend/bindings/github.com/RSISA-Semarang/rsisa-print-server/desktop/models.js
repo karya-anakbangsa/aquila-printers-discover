@@ -339,7 +339,7 @@ export class ServiceState {
         if (/** @type {any} */(false)) {
             /**
              * @member
-             * @type {string | null | undefined}
+             * @type {Date | null | undefined}
              */
             this["started_at"] = undefined;
         }
@@ -360,7 +360,11 @@ export class ServiceState {
      * @returns {ServiceState}
      */
     static createFrom($$source = {}) {
+        const $$createField4_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("started_at" in $$parsedSource) {
+            $$parsedSource["started_at"] = $$createField4_0($$parsedSource["started_at"]);
+        }
         return new ServiceState(/** @type {Partial<ServiceState>} */($$parsedSource));
     }
 }
@@ -369,3 +373,4 @@ export class ServiceState {
 const $$createType0 = printserver$0.OriginInfo.createFrom;
 const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = $Create.Array($Create.Any);
+const $$createType3 = $Create.Nullable($Create.DateFromTime);
