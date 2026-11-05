@@ -201,7 +201,17 @@ func (c *ServiceController) watchHealth(ctx context.Context, done <-chan struct{
 }
 
 func probeHealth(client *http.Client, listen string) bool {
-	response, err := client.Get("http://" + listen + "/health")
+	// Jika listen adalah 0.0.0.0, periksa ke 127.0.0.1 karena Windows/browser menolak request HTTP ke 0.0.0.0
+	targetHost := listen
+	if host, port, err := net.SplitHostPort(listen); err == nil {
+		if host == "0.0.0.0" || host == "" || host == "::" {
+			targetHost = net.JoinHostPort("127.0.0.1", port)
+		}
+	} else if strings.HasPrefix(listen, "0.0.0.0:") {
+		targetHost = "127.0.0.1:" + strings.TrimPrefix(listen, "0.0.0.0:")
+	}
+
+	response, err := client.Get("http://" + targetHost + "/health")
 	if err != nil {
 		return false
 	}

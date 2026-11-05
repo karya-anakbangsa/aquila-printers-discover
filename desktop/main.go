@@ -39,7 +39,7 @@ func main() {
 		Description:  "Panel kendali print server lokal Aquila",
 		ErrorHandler: startupErrorHandler(),
 		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID: "com.aquila.printserver",
+			UniqueID: "com.aquila.printserver.v21",
 			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
 				if ready.Load() {
 					api.ShowPanel()
@@ -65,12 +65,12 @@ func main() {
 	// pengguna langsung melihat konfigurasi yang dibuatkan.
 	mainWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "main",
-		Title:            "Aquila — Print Server",
+		Title:            "Aquila v2.1 — Print Server",
 		Width:            960,
 		Height:           660,
 		MinWidth:         720,
 		MinHeight:        520,
-		Hidden:           !(settings.OpenWindowOnLaunch || core.ConfigView().Created),
+		Hidden:           false,
 		BackgroundColour: application.NewRGB(248, 250, 252),
 		URL:              "/",
 	})

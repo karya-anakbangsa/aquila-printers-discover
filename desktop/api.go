@@ -178,6 +178,31 @@ func (s *AquilaService) OpenServerURL() error {
 // GetPrinterCount menghitung antrean printer yang terdeteksi pada PC ini.
 func (s *AquilaService) GetPrinterCount() int { return s.core.PrinterCount() }
 
+// GetPrinters mengembalikan daftar antrean printer yang terdeteksi pada PC ini.
+func (s *AquilaService) GetPrinters() ([]printserver.LocalPrinter, error) {
+	return s.core.Printers()
+}
+
+// TestPrinter mengirimkan tes cetak ke printer tertentu dari aplikasi desktop.
+func (s *AquilaService) TestPrinter(name, uri, mode string) error {
+	return s.core.TestPrinter(name, uri, mode)
+}
+
+// SetPrinterPort mengubah port antrean printer di Windows (misal ke USB002).
+func (s *AquilaService) SetPrinterPort(printerName, portName string) error {
+	return s.core.SetPrinterPort(printerName, portName)
+}
+
+// ClearPrinterQueue membersihkan antrean cetak yang macet untuk printer tertentu.
+func (s *AquilaService) ClearPrinterQueue(printerName string) error {
+	return s.core.ClearPrinterQueue(printerName)
+}
+
+// GetPrinterPorts mengembalikan daftar port printer yang ada di Windows.
+func (s *AquilaService) GetPrinterPorts() ([]string, error) {
+	return s.core.PrinterPorts()
+}
+
 // ToggleService menghidupkan layanan bila berhenti, atau mematikannya bila
 // sedang berjalan. Dipakai tombol popup dan menu tray.
 func (s *AquilaService) ToggleService() error {

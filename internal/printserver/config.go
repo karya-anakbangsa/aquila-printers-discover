@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/RSISA-Semarang/rsisa-print-server/internal/utils"
@@ -33,13 +35,58 @@ type RouteConfig struct {
 }
 
 type LocalPrinter struct {
-	Name      string `json:"name"`
-	State     string `json:"state"`
-	IsDefault bool   `json:"is_default"`
-	Driver    string `json:"driver,omitempty"`
-	Port      string `json:"port,omitempty"`
-	IP        string `json:"ip,omitempty"`
-	URI       string `json:"uri,omitempty"`
+	Name           string `json:"name"`
+	State          string `json:"state"`
+	IsDefault      bool   `json:"is_default"`
+	Driver         string `json:"driver,omitempty"`
+	Port           string `json:"port,omitempty"`
+	IP             string `json:"ip,omitempty"`
+	URI            string `json:"uri,omitempty"`
+	ConnectionType string `json:"connection_type,omitempty"`
+	PrinterType    string `json:"printer_type,omitempty"` // "thermal" atau "document"
+}
+
+// IsThermalOrPOS checks if a printer name, driver, or port indicates a thermal receipt / label printer.
+func IsThermalOrPOS(name, driver, port string) bool {
+	combined := strings.ToUpper(name + " " + driver + " " + port)
+	keywords := []string{
+		"POS", "THERMAL", "RECEIPT", "STRUK", "KASIR",
+		"TM-T", "TM-U", "TM-P", "EPSON TM",
+		"RP80", "XP-", "XP58", "XP80", "XPRINTER",
+		"58MM", "80MM", "58 MM", "80 MM",
+		"MINIPRINTER", "MINI PRINTER",
+		"LABEL", "BARCODE", "ZEBRA", "TSC", "ARGOX", "POSTEK",
+		"GENERIC / TEXT ONLY", "GENERIC/TEXT", "RAW",
+		"BT-", "MPT-", "ZJ-", "GOOJPRT", "PANDA", "IWARE", "EPX", "BLUEBAMBOO",
+	}
+	for _, kw := range keywords {
+		if strings.Contains(combined, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+// DetermineConnectionType detects whether a printer is USB, serial, network, or virtual.
+func DetermineConnectionType(port, driver, ip string) string {
+	portUpper := strings.ToUpper(strings.TrimSpace(port))
+	driverUpper := strings.ToUpper(strings.TrimSpace(driver))
+	if strings.HasPrefix(portUpper, "USB") || strings.HasPrefix(portUpper, "DOT4") || strings.Contains(portUpper, "USB") || strings.Contains(driverUpper, "USB") {
+		return "usb"
+	}
+	if strings.HasPrefix(portUpper, "COM") || strings.HasPrefix(portUpper, "LPT") {
+		return "serial"
+	}
+	if ip != "" || strings.HasPrefix(portUpper, "IP_") || strings.HasPrefix(portUpper, "TCP") || strings.HasPrefix(portUpper, "WSD-") || strings.Contains(portUpper, ".") {
+		return "network"
+	}
+	if strings.HasPrefix(portUpper, "FILE:") || strings.HasPrefix(portUpper, "PORTPROMPT:") || strings.Contains(driverUpper, "PDF") || strings.Contains(driverUpper, "XPS") {
+		return "virtual"
+	}
+	if portUpper != "" {
+		return "local"
+	}
+	return ""
 }
 
 type Config struct {
@@ -79,8 +126,22 @@ func (cfg *Config) Validate() error {
 	if cfg.Listen == "" {
 		cfg.Listen = DefaultListen
 	}
-	if !strings.HasPrefix(cfg.Listen, "127.0.0.1:") && !strings.HasPrefix(cfg.Listen, "localhost:") {
-		return errors.New("print server hanya boleh listen di localhost untuk mencegah akses dari jaringan lain")
+	host, port, err := net.SplitHostPort(cfg.Listen)
+	if err != nil {
+		return fmt.Errorf("alamat listen tidak valid (%s): %w", cfg.Listen, err)
+	}
+	portNum, err := strconv.Atoi(port)
+	if err != nil || portNum < 1 || portNum > 65535 {
+		return errors.New("port listen harus antara 1 dan 65535")
+	}
+	if host != "localhost" {
+		ip := net.ParseIP(strings.Trim(host, "[]"))
+		if ip == nil {
+			return fmt.Errorf("host listen %q bukan IP atau localhost yang valid", host)
+		}
+		if !(ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified()) {
+			return errors.New("print server hanya boleh listen di localhost, 0.0.0.0, atau IP privat LAN untuk mencegah akses dari internet publik")
+		}
 	}
 	printerNames := make(map[string]string, len(cfg.Printers))
 	for i := range cfg.Printers {

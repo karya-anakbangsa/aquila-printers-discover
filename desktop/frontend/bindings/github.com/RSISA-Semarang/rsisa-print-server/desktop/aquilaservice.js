@@ -40,6 +40,15 @@ export function ClearLogs() {
 }
 
 /**
+ * ClearPrinterQueue membersihkan antrean cetak yang macet untuk printer tertentu.
+ * @param {string} printerName
+ * @returns {$CancellablePromise<void>}
+ */
+export function ClearPrinterQueue(printerName) {
+    return $Call.ByID(3312234832, printerName);
+}
+
+/**
  * CopyServerAddress menyalin alamat print server ke papan klip.
  * @returns {$CancellablePromise<void>}
  */
@@ -113,12 +122,32 @@ export function GetPrinterCount() {
 }
 
 /**
+ * GetPrinterPorts mengembalikan daftar port printer yang ada di Windows.
+ * @returns {$CancellablePromise<string[]>}
+ */
+export function GetPrinterPorts() {
+    return $Call.ByID(605231434).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType6($result);
+    }));
+}
+
+/**
+ * GetPrinters mengembalikan daftar antrean printer yang terdeteksi pada PC ini.
+ * @returns {$CancellablePromise<printserver$0.LocalPrinter[]>}
+ */
+export function GetPrinters() {
+    return $Call.ByID(3218359859).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType8($result);
+    }));
+}
+
+/**
  * GetSettings mengembalikan preferensi aplikasi desktop.
  * @returns {$CancellablePromise<$models.AppSettings>}
  */
 export function GetSettings() {
     return $Call.ByID(293930939).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType6($result);
+        return $$createType9($result);
     }));
 }
 
@@ -128,7 +157,7 @@ export function GetSettings() {
  */
 export function GetState() {
     return $Call.ByID(2333843955).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType10($result);
     }));
 }
 
@@ -237,6 +266,16 @@ export function SetListen(host, port, restart) {
 }
 
 /**
+ * SetPrinterPort mengubah port antrean printer di Windows (misal ke USB002).
+ * @param {string} printerName
+ * @param {string} portName
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetPrinterPort(printerName, portName) {
+    return $Call.ByID(2751711393, printerName, portName);
+}
+
+/**
  * ShowPanel menampilkan jendela utama (panel) di atas aplikasi lain.
  * @returns {$CancellablePromise<void>}
  */
@@ -266,8 +305,19 @@ export function StopService() {
  */
 export function TestConnection() {
     return $Call.ByID(2165223494).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType8($result);
+        return $$createType11($result);
     }));
+}
+
+/**
+ * TestPrinter mengirimkan tes cetak ke printer tertentu dari aplikasi desktop.
+ * @param {string} name
+ * @param {string} uri
+ * @param {string} mode
+ * @returns {$CancellablePromise<void>}
+ */
+export function TestPrinter(name, uri, mode) {
+    return $Call.ByID(503700518, name, uri, mode);
 }
 
 /**
@@ -306,6 +356,9 @@ const $$createType2 = $models.LogEntry.createFrom;
 const $$createType3 = $Create.Array($$createType2);
 const $$createType4 = printserver$0.OriginInfo.createFrom;
 const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = $models.AppSettings.createFrom;
-const $$createType7 = $models.ServiceState.createFrom;
-const $$createType8 = $models.HealthResult.createFrom;
+const $$createType6 = $Create.Array($Create.Any);
+const $$createType7 = printserver$0.LocalPrinter.createFrom;
+const $$createType8 = $Create.Array($$createType7);
+const $$createType9 = $models.AppSettings.createFrom;
+const $$createType10 = $models.ServiceState.createFrom;
+const $$createType11 = $models.HealthResult.createFrom;

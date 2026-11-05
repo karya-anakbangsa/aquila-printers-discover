@@ -6,6 +6,91 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
+export class LocalPrinter {
+    /**
+     * Creates a new LocalPrinter instance.
+     * @param {Partial<LocalPrinter>} [$$source = {}] - The source object to create the LocalPrinter.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("state" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+        if (!("is_default" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["is_default"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["driver"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["port"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["ip"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["uri"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["connection_type"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * "thermal" atau "document"
+             * @member
+             * @type {string | undefined}
+             */
+            this["printer_type"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LocalPrinter instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {LocalPrinter}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new LocalPrinter(/** @type {Partial<LocalPrinter>} */($$parsedSource));
+    }
+}
+
 /**
  * OriginInfo adalah hasil normalisasi satu alamat asal (origin).
  */

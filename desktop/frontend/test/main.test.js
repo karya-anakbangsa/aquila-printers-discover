@@ -38,6 +38,11 @@ async function boot(overrides = {}) {
     GetState: async () => ({ status: "stopped", listen: "127.0.0.1:17891" }),
     GetSettings: async () => ({}), GetLogs: async () => [],
     GetAutostart: async () => false, GetPrinterCount: async () => 1,
+    GetPrinters: async () => [{ name: "POS-58", state: "ready", connection_type: "usb", port: "USB001" }],
+    GetPrinterPorts: async () => ["USB001", "USB002", "COM1"],
+    SetPrinterPort: async () => {},
+    ClearPrinterQueue: async () => {},
+    TestPrinter: async () => {},
     ...overrides,
   });
   vm.runInContext(source, context);
@@ -99,4 +104,16 @@ test("galat layanan tampil pada panel", async () => {
   vm.runInContext('state.service = { status: "error", last_error: "port sedang dipakai" }; renderStatus()', context);
   assert.equal(node("#service-error").textContent, "port sedang dipakai");
   assert.match(node("#service-error").className, /show err/);
+});
+
+test("daftar printer terdeteksi tampil pada panel printer", async () => {
+  const dummyPrinters = [
+    { name: "POS-58 Thermal", state: "ready", connection_type: "usb", port: "USB001", is_default: true },
+    { name: "Network Laser", state: "ready", connection_type: "network", port: "IP_192.168.1.50", ip: "192.168.1.50" }
+  ];
+  const { node } = await boot({ GetPrinters: async () => dummyPrinters });
+  assert.match(node("#printer-list").innerHTML, /POS-58 Thermal/);
+  assert.match(node("#printer-list").innerHTML, /Network Laser/);
+  assert.match(node("#printer-list").innerHTML, /badge-usb/);
+  assert.match(node("#printer-list").innerHTML, /badge-network/);
 });
