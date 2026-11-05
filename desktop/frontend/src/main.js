@@ -7,6 +7,7 @@ import {
   ClearPrinterQueue,
   CopyServerAddress,
   DiagnosePort,
+  DiscoverNetworkPrinters,
   ExportConfig,
   GetAutostart,
   GetConfig,
@@ -349,23 +350,19 @@ function renderPrinters(error = null) {
 }
 
 function loadNetworkPrinters(force = false) {
-  if (typeof fetch !== "function") return Promise.resolve();
+  if (typeof DiscoverNetworkPrinters !== "function") return Promise.resolve();
   if (state.loadingNetworkPrinters && !force) return state.networkPrintersPromise || Promise.resolve();
   state.loadingNetworkPrinters = true;
   const listEl = $("#network-printer-list");
   if (listEl && (!state.networkPrinters || force)) {
     listEl.innerHTML = '<p class="muted">Memindai printer di jaringan via Bonjour/mDNS…</p>';
   }
-  const port = state.config?.listen_port || 17891;
-  const host = (state.config?.listen_host === "0.0.0.0" || !state.config?.listen_host) ? "127.0.0.1" : state.config.listen_host;
-  
-  state.networkPrintersPromise = fetch(`http://${host}:${port}/printers/discover`)
-    .then((res) => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
-    })
-    .then((payload) => {
-      state.networkPrinters = payload.data || [];
+  // Panggil langsung ke Go lewat binding Wails (bukan fetch HTTP), karena
+  // WebView desktop bukan origin yang diizinkan oleh print server lokal.
+  state.networkPrintersPromise = Promise.resolve()
+    .then(() => DiscoverNetworkPrinters())
+    .then((list) => {
+      state.networkPrinters = Array.isArray(list) ? list : [];
       state.loadingNetworkPrinters = false;
       renderNetworkPrinters();
     })
@@ -834,17 +831,7 @@ function bindEvents() {
         btn.textContent = "Mengirim…";
         hideBanner("#network-printer-banner");
         try {
-          const port = state.config?.listen_port || 17891;
-          const host = (state.config?.listen_host === "0.0.0.0" || !state.config?.listen_host) ? "127.0.0.1" : state.config.listen_host;
-          const res = await fetch(`http://${host}:${port}/printers/test`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: p.name, uri: p.uri, mode: "bw", paper: "A4" }),
-          });
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.message || `HTTP ${res.status}`);
-          }
+          await TestPrinter(p.name, p.uri, "bw");
           showBanner(
             "#network-printer-banner",
             `Uji cetak berhasil dikirim langsung via IPP ke "${p.name}" (${p.uri}). Silakan periksa hasil cetakan printer fisik.`,
@@ -1007,7 +994,7 @@ function bindEvents() {
           } catch (rpcErr) {
             showBanner(
               "#printer-banner",
-              `Uji cetak ke "${p.name}" gagal: ${errorMessage(fetchErr || rpcErr)}`,
+              `Uji cetak ke "${p.name}" gagal: ${errorMessage(rpcErr || fetchErr)}`,
               false
             );
           }

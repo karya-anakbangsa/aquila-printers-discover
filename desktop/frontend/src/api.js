@@ -7,6 +7,7 @@ export {
   ClearPrinterQueue,
   CopyServerAddress,
   DiagnosePort,
+  DiscoverNetworkPrinters,
   ExportConfig,
   GetAutostart,
   GetConfig,
