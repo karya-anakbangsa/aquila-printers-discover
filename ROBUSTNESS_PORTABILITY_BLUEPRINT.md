@@ -1,4 +1,4 @@
-# Cetak Biru Arsitektur: Robustness & Portability Aquila Print Server
+# Cetak Biru Arsitektur: Robustness & Portability RSISA Printer Server
 
 Dokumen ini menjelaskan strategi teknis mendalam untuk mencapai dua pilar utama sistem print server produksi: **Robustness (Ketahanan Tinggi)** dan **Portability (Portabilitas Universal)** di lingkungan rumah sakit, klinik, dan ritel.
 
@@ -94,7 +94,7 @@ graph LR
 
 ## 3. Matriks Skenario Robustness & Portability
 
-| Skenario Lapangan | Resiko Tradisional | Penanganan Aquila (Sistem Sekarang) |
+| Skenario Lapangan | Resiko Tradisional | Penanganan RSISA Printer Server (Sistem Sekarang) |
 | :--- | :--- | :--- |
 | **Kabel USB pindah colokan** | Port berubah (`USB001` -> `USB002`), cetak macet | **PnP Spooler:** Nama antrean dipertahankan Windows Spooler; data tetap sampai tanpa konfigurasi port manual. |
 | **Kertas Thermal Habis** | Antrean terkunci (*spooler stuck*) | Tombol **Bersihkan Antrean** otomatis memanggil `SetJob` untuk menghapus dokumen macet secara instan. |

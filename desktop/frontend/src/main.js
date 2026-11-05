@@ -930,7 +930,7 @@ function renderMainShell() {
   $("#app").innerHTML = `
     <div class="topbar">
       <div class="logo" aria-hidden="true"><img src="/aquila-icon.png" alt=""></div>
-      <h1>Aquila v2.1</h1>
+      <h1>RSISA Printer Server</h1>
       <div class="pill"><span class="dot" id="pill-dot"></span><span id="pill-text">…</span></div>
     </div>
     <div class="tabs" id="tabs">
@@ -939,7 +939,7 @@ function renderMainShell() {
       <button data-tab="origin">Alamat Diizinkan</button>
       <button data-tab="settings">Pengaturan</button>
       <button data-tab="log">Log</button>
-      <button data-tab="about">Tentang Aquila</button>
+      <button data-tab="about">Tentang RSISA Printer Server</button>
     </div>
     <div class="content">
       <div class="tab-pane active" id="pane-beranda">
@@ -1045,14 +1045,14 @@ function renderMainShell() {
             <input type="checkbox" id="set-start-service" />
             <div>
               <div class="check-label">Mulai layanan saat aplikasi dibuka</div>
-              <div class="check-desc">Print server langsung aktif begitu Aquila berjalan.</div>
+              <div class="check-desc">Print server langsung aktif begitu RSISA Printer Server berjalan.</div>
             </div>
           </label>
           <label class="check">
             <input type="checkbox" id="set-open-window" />
             <div>
               <div class="check-label">Buka jendela panel saat aplikasi dibuka</div>
-              <div class="check-desc">Bila dimatikan, Aquila langsung bersemayam di baki sistem.</div>
+              <div class="check-desc">Bila dimatikan, RSISA Printer Server tetap berjalan di baki sistem.</div>
             </div>
           </label>
           <label class="check">
@@ -1083,8 +1083,8 @@ function renderMainShell() {
           <label class="check">
             <input type="checkbox" id="set-autostart" />
             <div>
-              <div class="check-label">Jalankan Aquila saat login</div>
-              <div class="check-desc">Aquila muncul di baki sistem setiap komputer dinyalakan.</div>
+              <div class="check-label">Jalankan RSISA Printer Server saat login</div>
+              <div class="check-desc">RSISA Printer Server muncul di baki sistem setiap komputer dinyalakan.</div>
             </div>
           </label>
         </div>
@@ -1100,9 +1100,9 @@ function renderMainShell() {
           <pre class="log-view" id="cfg-json" style="min-height:110px;max-height:200px;margin-top:8px"></pre>
         </div>
         <div class="card">
-          <h2>Uninstall Aquila</h2>
+          <h2>Uninstall RSISA Printer Server</h2>
           <p class="muted">Hentikan layanan dan hapus aplikasi dari komputer ini. Konfigurasi serta daftar alamat tetap disimpan agar dapat dipakai saat instal ulang.</p>
-          <button class="danger" data-action="uninstall" style="margin-top:12px">Uninstall Aquila…</button>
+          <button class="danger" data-action="uninstall" style="margin-top:12px">Uninstall RSISA Printer Server…</button>
           <div class="banner" id="uninstall-banner" role="status" style="margin-top:10px"></div>
         </div>
       </div>
@@ -1110,7 +1110,7 @@ function renderMainShell() {
       <div class="tab-pane" id="pane-about">
         <div class="card about-card">
           <div class="logo about-logo" aria-hidden="true"><img src="/aquila-icon.png" alt=""></div>
-          <h2>AQUILA</h2>
+          <h2>RSISA PRINTER SERVER</h2>
           <p class="about-subtitle">Print Server</p>
           <p class="about-version">Versi <span id="cfg-version">…</span></p>
           <div class="about-author">
@@ -1165,7 +1165,7 @@ function renderPopupShell() {
 
 async function init() {
   if (isPopup) {
-    document.title = "Aquila";
+    document.title = "RSISA Printer Server";
     renderPopupShell();
   } else {
     renderMainShell();

@@ -1,4 +1,4 @@
-// Shim bindings: satu pintu masuk untuk seluruh API Go Aquila.
+// Shim bindings: satu pintu masuk untuk seluruh API Go RSISA Printer Server.
 // File ini hanya re-export dari bindings hasil `wails3 generate bindings`,
 // sehingga perubahan path import cukup dilakukan di satu tempat.
 export {

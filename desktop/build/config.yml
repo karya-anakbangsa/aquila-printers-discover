@@ -6,9 +6,9 @@ version: '3'
 # This information is used to generate the build assets.
 info:
   companyName: "CV ANAK BANGSA" # The name of the company
-  productName: "Aquila" # The name of the application
+  productName: "RSISA Printer Server" # The name of the application
   productIdentifier: "com.aquila.printserver" # The unique product identifier
-  description: "Panel kendali print server lokal Aquila" # The application description
+  description: "Panel kendali server printer lokal RSISA" # The application description
   copyright: "(c) 2026, CV ANAK BANGSA" # Copyright text
   comments: "Print server lokal lintas platform" # Comments
   version: "1.0.8" # The application version

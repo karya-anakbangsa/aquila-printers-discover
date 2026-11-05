@@ -244,7 +244,7 @@ func (s *AquilaService) QuitApp() {
 	app := s.app()
 	if s.core.Settings().ConfirmQuit {
 		dialog := app.Dialog.Question()
-		dialog.SetTitle("Keluar dari Aquila")
+		dialog.SetTitle("Keluar dari RSISA Printer Server")
 		dialog.SetMessage("Layanan print server akan dihentikan. Keluar sekarang?")
 		confirm := dialog.AddButton("Keluar")
 		confirm.OnClick(func() {

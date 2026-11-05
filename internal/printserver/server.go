@@ -544,7 +544,7 @@ func TestPrinterFromDesktop(ctx context.Context, name, uri, mode string) error {
 			if err != nil {
 				return err
 			}
-			_, err = utils.PrintIPPDocument(ctx, uri, pdf, "Tes Printer", "aquila", 1, "")
+			_, err = utils.PrintIPPDocument(ctx, uri, pdf, "Tes Printer", "RSISA Printer Server", 1, "")
 			return err
 		}
 	}
@@ -569,7 +569,7 @@ func sendQualityTestPage(ctx context.Context, printerName string, options utils.
 func submitPrinterPDF(ctx context.Context, uri string, pdf []byte, jobName, userName string, copies int, media string) (int, error) {
 	if queueName, err := utils.WindowsQueueName(uri); err == nil {
 		if runtime.GOOS != "windows" {
-			return 0, fmt.Errorf("antrean Windows hanya dapat dicetak dari Aquila yang berjalan di Windows")
+			return 0, fmt.Errorf("antrean Windows hanya dapat dicetak dari RSISA Printer Server yang berjalan di Windows")
 		}
 		return 0, printPDFToWindowsQueue(ctx, queueName, pdf, jobName, copies, media)
 	}
@@ -904,7 +904,7 @@ func (s *Server) submitRaw(c *fiber.Ctx) error {
 	}
 
 	if docTitle == "" {
-		docTitle = "Aquila USB Print"
+		docTitle = "RSISA Printer Server USB Print"
 	}
 
 	if port == "" && printerName == "" {

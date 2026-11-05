@@ -42,7 +42,7 @@ func PrintRawToWindowsPrinter(printerName string, data []byte, docTitle string) 
 	_ = tempFile.Close()
 
 	if docTitle == "" {
-		docTitle = "Aquila RAW Print"
+		docTitle = "RSISA Printer Server RAW Print"
 	}
 	cmd := exec.CommandContext(context.Background(), "lp", "-d", printerName, "-t", docTitle, "-o", "raw", path)
 	out, err := cmd.CombinedOutput()

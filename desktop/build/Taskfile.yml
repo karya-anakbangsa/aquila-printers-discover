@@ -191,7 +191,7 @@ tasks:
       - wails3 generate bindings -f '{{.BUILD_FLAGS}}' -clean=true -time-type=Date{{if eq .OBFUSCATED "true"}} -obfuscated{{end}}
 
   generate:icons:
-    summary: Generates Windows `.ico` and Mac `.icns` from the Aquila icon.
+    summary: Generates Windows `.ico` and Mac `.icns` from the application icon.
     run: once
     dir: build
     sources:

@@ -6,9 +6,9 @@
 		"0409": {
 			"ProductVersion": "1.0.8",
 			"CompanyName": "CV ANAK BANGSA",
-			"FileDescription": "Panel kendali print server lokal Aquila",
+			"FileDescription": "Panel kendali server printer lokal RSISA",
 			"LegalCopyright": "(c) 2026, CV ANAK BANGSA",
-			"ProductName": "Aquila",
+			"ProductName": "RSISA Printer Server",
 			"Comments": "Print server lokal lintas platform"
 		}
 	}

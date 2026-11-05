@@ -30,14 +30,14 @@ func (s *AquilaService) uninstallApp() error {
 	}
 	app := s.app()
 	dialog := app.Dialog.Question()
-	dialog.SetTitle("Uninstall Aquila")
+	dialog.SetTitle("Uninstall RSISA Printer Server")
 	dialog.SetMessage(plan.description + "\n\nLayanan akan dihentikan dan startup otomatis dinonaktifkan. Konfigurasi tetap disimpan di:\n" + s.core.ConfigDir())
 	confirm := dialog.AddButton("Uninstall")
 	confirm.OnClick(func() {
 		go func() {
 			if err := s.runUninstall(plan); err != nil {
 				s.core.log("ERROR", "uninstall gagal: "+err.Error())
-				app.Dialog.Error().SetTitle("Aquila belum dihapus").SetMessage(err.Error()).Show()
+				app.Dialog.Error().SetTitle("RSISA Printer Server belum dihapus").SetMessage(err.Error()).Show()
 				return
 			}
 			quitting.Store(true)

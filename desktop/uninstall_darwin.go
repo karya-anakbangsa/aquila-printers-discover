@@ -33,10 +33,10 @@ func macAppBundle(executable string) (string, error) {
 	contents := filepath.Dir(macOS)
 	bundle := filepath.Dir(contents)
 	if filepath.Base(executable) != "aquila" || filepath.Base(macOS) != "MacOS" || filepath.Base(contents) != "Contents" || !strings.EqualFold(filepath.Ext(bundle), ".app") {
-		return "", fmt.Errorf("jalankan Aquila dari aplikasi .app untuk memakai uninstall")
+		return "", fmt.Errorf("jalankan RSISA Printer Server dari aplikasi .app untuk memakai uninstall")
 	}
 	if strings.HasPrefix(bundle, "/Volumes/") {
-		return "", fmt.Errorf("Aquila berjalan dari disk image. Tutup aplikasi dan eject DMG; untuk menghapus instalasi, buka Aquila dari folder Applications")
+		return "", fmt.Errorf("RSISA Printer Server berjalan dari disk image. Tutup aplikasi dan eject DMG; untuk menghapus instalasi, buka aplikasi dari folder Applications")
 	}
 	return bundle, nil
 }
@@ -54,7 +54,7 @@ func prepareUninstall(executable string) (uninstallPlan, error) {
 			defer C.free(unsafe.Pointer(path))
 			if message := C.aquilaTrashApp(path); message != nil {
 				defer C.free(unsafe.Pointer(message))
-				return fmt.Errorf("gagal memindahkan Aquila ke Trash: %s", C.GoString(message))
+				return fmt.Errorf("gagal memindahkan RSISA Printer Server ke Trash: %s", C.GoString(message))
 			}
 			return nil
 		},
