@@ -20,6 +20,7 @@ export {
   GetState,
   HidePopup,
   ImportConfig,
+  InstallNetworkPrinter,
   OpenConfigFolder,
   OpenServerURL,
   QuitApp,

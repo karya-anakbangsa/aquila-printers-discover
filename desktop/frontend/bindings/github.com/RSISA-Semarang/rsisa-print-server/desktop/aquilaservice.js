@@ -188,6 +188,17 @@ export function ImportConfig() {
 }
 
 /**
+ * InstallNetworkPrinter mendaftarkan printer jaringan (IPP) ke antrean sistem operasi (OS) komputer ini.
+ * @param {string} name
+ * @param {string} uri
+ * @param {string} model
+ * @returns {$CancellablePromise<void>}
+ */
+export function InstallNetworkPrinter(name, uri, model) {
+    return $Call.ByID(1677420427, name, uri, model);
+}
+
+/**
  * OpenConfigFolder membuka folder konfigurasi di file manager.
  * @returns {$CancellablePromise<void>}
  */

@@ -18,6 +18,7 @@ import {
   GetSettings,
   GetState,
   ImportConfig,
+  InstallNetworkPrinter,
   OpenConfigFolder,
   OpenServerURL,
   QuitApp,
@@ -53,7 +54,13 @@ const ICONS = {
   copy: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`,
   search: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>`,
   trash: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`,
+  plus: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
+  check: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
 };
+
+function normalizePrinterName(val) {
+  return (val || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
 
 const state = {
   service: null,
@@ -414,12 +421,20 @@ function renderNetworkPrinters(error = null) {
     `;
   }
 
+  const installedQueues = (state.printerList || []).map((lp) => normalizePrinterName(lp.name));
+
   listEl.innerHTML = list
     .map((p, idx) => {
       const supportsPDF = (p.pdl || []).includes("application/pdf");
       const formats = (p.pdl || [])
         .map((f) => f.replace("application/", "").replace("image/", ""))
         .join(", ");
+
+      const normNetName = normalizePrinterName(p.name);
+      const normModel = normalizePrinterName(p.model || "");
+      const isInstalled = installedQueues.some(
+        (q) => q === normNetName || (normModel && q === normModel) || (q.length > 3 && normNetName.includes(q)) || (normNetName.length > 3 && q.includes(normNetName))
+      );
 
       return `
         <div class="printer-card" data-printer-uri="${esc(p.uri)}">
@@ -430,6 +445,11 @@ function renderNetworkPrinters(error = null) {
               <span class="badge ${supportsPDF ? "badge-ready" : "badge-virtual"}">${supportsPDF ? "PDF Direct" : "Raster / URF"}</span>
               <span class="badge badge-usb">Port ${esc(String(p.port))}</span>
             </div>
+            ${isInstalled ? `
+              <span class="badge badge-ready" style="padding:4px 9px;font-size:0.8rem;display:inline-flex;align-items:center;gap:4px">
+                ${ICONS.check} Terpasang di OS
+              </span>
+            ` : ""}
           </div>
           <div class="printer-details">
             <span>Model: <strong>${esc(p.model || p.name)}</strong></span>
@@ -439,6 +459,11 @@ function renderNetworkPrinters(error = null) {
             ${formats ? `<span class="muted" style="font-size:0.8rem">Format: ${esc(formats)}</span>` : ""}
           </div>
           <div class="printer-actions" style="margin-top:10px">
+            ${!isInstalled ? `
+              <button class="secondary" data-action="install-device-printer" data-index="${idx}" title="Pasang printer ini langsung ke pengaturan antrean sistem operasi (OS) komputer ini">
+                ${ICONS.plus} Pasang ke Komputer Ini
+              </button>
+            ` : ""}
             <button class="primary" data-action="test-network-printer" data-index="${idx}">
               ${ICONS.printer} Tes Cetak Langsung (IPP)
             </button>
@@ -851,6 +876,34 @@ function bindEvents() {
             false
           );
         } finally {
+          btn.disabled = false;
+          btn.innerHTML = oldHTML;
+        }
+        break;
+      }
+      case "install-device-printer": {
+        const idx = parseInt(btn.dataset.index, 10);
+        const p = state.networkPrinters && state.networkPrinters[idx];
+        if (!p) break;
+        const oldHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `${ICONS.plus} Memasang ke OS…`;
+        hideBanner("#network-printer-banner");
+        try {
+          await InstallNetworkPrinter(p.name, p.uri, p.model || p.name);
+          showBanner(
+            "#network-printer-banner",
+            `Printer "${p.name}" berhasil dipasang ke sistem operasi komputer ini! Antrean sekarang tersedia di antrean OS lokal.`,
+            true
+          );
+          await loadPrinters(true);
+          renderNetworkPrinters();
+        } catch (err) {
+          showBanner(
+            "#network-printer-banner",
+            `Gagal memasang printer "${p.name}": ${errorMessage(err)}`,
+            false
+          );
           btn.disabled = false;
           btn.innerHTML = oldHTML;
         }

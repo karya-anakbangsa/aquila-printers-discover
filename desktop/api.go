@@ -188,6 +188,11 @@ func (s *AquilaService) DiscoverNetworkPrinters() ([]printserver.DiscoveredPrint
 	return s.core.DiscoverPrinters()
 }
 
+// InstallNetworkPrinter mendaftarkan printer jaringan (IPP) ke antrean sistem operasi (OS) komputer ini.
+func (s *AquilaService) InstallNetworkPrinter(name, uri, model string) error {
+	return s.core.InstallNetworkPrinter(name, uri, model)
+}
+
 // TestPrinter mengirimkan tes cetak ke printer tertentu dari aplikasi desktop.
 func (s *AquilaService) TestPrinter(name, uri, mode string) error {
 	return s.core.TestPrinter(name, uri, mode)
