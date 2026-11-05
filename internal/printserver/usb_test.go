@@ -72,7 +72,7 @@ func TestUSBEndpoints(t *testing.T) {
 
 	// Test GET /printers/usb
 	reqUSB := httptest.NewRequest("GET", "/printers/usb", nil)
-	respUSB, err := server.App().Test(reqUSB)
+	respUSB, err := server.App().Test(reqUSB, -1)
 	if err != nil {
 		t.Fatalf("GET /printers/usb failed: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestUSBEndpoints(t *testing.T) {
 
 	// Test GET /printers/ports
 	reqPorts := httptest.NewRequest("GET", "/printers/ports", nil)
-	respPorts, err := server.App().Test(reqPorts)
+	respPorts, err := server.App().Test(reqPorts, -1)
 	if err != nil {
 		t.Fatalf("GET /printers/ports failed: %v", err)
 	}
