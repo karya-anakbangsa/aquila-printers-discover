@@ -442,6 +442,13 @@ func (c *Core) Printers() ([]printserver.LocalPrinter, error) {
 	return printserver.ListPrinters(ctx)
 }
 
+// DiscoverPrinters memindai printer jaringan via mDNS/Bonjour (IPP/IPPS).
+func (c *Core) DiscoverPrinters() ([]printserver.DiscoveredPrinter, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	return printserver.DiscoverIPPPrinters(ctx)
+}
+
 // TestPrinter mengirim dokumen tes cetak ke printer tertentu dari aplikasi desktop.
 func (c *Core) TestPrinter(name, uri, mode string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

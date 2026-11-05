@@ -22,7 +22,7 @@ const (
 
 var mdnsGroup = &net.UDPAddr{IP: net.ParseIP("224.0.0.251"), Port: mdnsPort}
 
-type discoveredPrinter struct {
+type DiscoveredPrinter struct {
 	Name  string   `json:"name"`
 	Model string   `json:"model,omitempty"`
 	Host  string   `json:"host"`
@@ -32,6 +32,13 @@ type discoveredPrinter struct {
 	PDL   []string `json:"pdl,omitempty"`
 	State string   `json:"state"`
 }
+type discoveredPrinter = DiscoveredPrinter
+
+// DiscoverIPPPrinters mencari printer jaringan yang mengiklankan IPP/IPPS via mDNS/Bonjour.
+func DiscoverIPPPrinters(ctx context.Context) ([]DiscoveredPrinter, error) {
+	return discoverIPPPrinters(ctx)
+}
+
 
 type mdnsRecord struct {
 	Name   string

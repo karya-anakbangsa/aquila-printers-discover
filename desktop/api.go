@@ -183,6 +183,11 @@ func (s *AquilaService) GetPrinters() ([]printserver.LocalPrinter, error) {
 	return s.core.Printers()
 }
 
+// DiscoverNetworkPrinters mencari printer jaringan via Bonjour/mDNS (IPP/IPPS).
+func (s *AquilaService) DiscoverNetworkPrinters() ([]printserver.DiscoveredPrinter, error) {
+	return s.core.DiscoverPrinters()
+}
+
 // TestPrinter mengirimkan tes cetak ke printer tertentu dari aplikasi desktop.
 func (s *AquilaService) TestPrinter(name, uri, mode string) error {
 	return s.core.TestPrinter(name, uri, mode)

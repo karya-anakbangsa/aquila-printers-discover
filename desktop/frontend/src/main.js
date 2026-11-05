@@ -55,6 +55,8 @@ const state = {
   printers: -1, // -1 = belum dimuat
   printerList: null,
   loadingPrinters: false,
+  networkPrinters: null,
+  loadingNetworkPrinters: false,
   editingIndex: -1,
   savingOrigin: false,
   autoscroll: true,
@@ -339,6 +341,106 @@ function renderPrinters(error = null) {
                 : `<button class="secondary" data-action="test-doc-printer" data-index="${idx}" title="Uji kirim format Windows GDI">Tes Cetak Dokumen</button>`
             }
             <button class="icon-btn danger" data-action="clear-printer-queue" data-index="${idx}" title="Hapus seluruh dokumen macet di printer ini">Bersihkan Antrean</button>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function loadNetworkPrinters(force = false) {
+  if (typeof fetch !== "function") return Promise.resolve();
+  if (state.loadingNetworkPrinters && !force) return state.networkPrintersPromise || Promise.resolve();
+  state.loadingNetworkPrinters = true;
+  const listEl = $("#network-printer-list");
+  if (listEl && (!state.networkPrinters || force)) {
+    listEl.innerHTML = '<p class="muted">Memindai printer di jaringan via Bonjour/mDNS…</p>';
+  }
+  const port = state.config?.listen_port || 17891;
+  const host = (state.config?.listen_host === "0.0.0.0" || !state.config?.listen_host) ? "127.0.0.1" : state.config.listen_host;
+  
+  state.networkPrintersPromise = fetch(`http://${host}:${port}/printers/discover`)
+    .then((res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    })
+    .then((payload) => {
+      state.networkPrinters = payload.data || [];
+      state.loadingNetworkPrinters = false;
+      renderNetworkPrinters();
+    })
+    .catch((err) => {
+      state.loadingNetworkPrinters = false;
+      state.networkPrinters = [];
+      renderNetworkPrinters(err);
+    });
+  return state.networkPrintersPromise;
+}
+
+function renderNetworkPrinters(error = null) {
+  const listEl = $("#network-printer-list");
+  const statsEl = $("#network-printer-stats");
+  if (!listEl) return;
+
+  if (error) {
+    listEl.innerHTML = `<p class="muted" style="color:var(--err)">Pencarian mDNS gagal: ${esc(errorMessage(error))}</p>`;
+    if (statsEl) statsEl.innerHTML = "";
+    return;
+  }
+
+  if (state.loadingNetworkPrinters && !state.networkPrinters) {
+    listEl.innerHTML = '<p class="muted">Sedang memindai jaringan Wi-Fi/LAN (Bonjour / mDNS)…</p>';
+    if (statsEl) statsEl.innerHTML = "";
+    return;
+  }
+
+  const list = state.networkPrinters || [];
+  if (list.length === 0) {
+    listEl.innerHTML = '<p class="muted">Belum ada printer jaringan ditemukan via Bonjour/mDNS. Pastikan printer jaringan menyala dan berada pada Wi-Fi/LAN yang sama dengan PC ini.</p>';
+    if (statsEl) statsEl.innerHTML = "";
+    return;
+  }
+
+  const pdfCount = list.filter((p) => (p.pdl || []).includes("application/pdf")).length;
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <div class="printer-stat-chip">Printer Jaringan: <b>${list.length}</b></div>
+      <div class="printer-stat-chip">Mendukung PDF Direct: <b>${pdfCount}</b></div>
+    `;
+  }
+
+  listEl.innerHTML = list
+    .map((p, idx) => {
+      const supportsPDF = (p.pdl || []).includes("application/pdf");
+      const formats = (p.pdl || [])
+        .map((f) => f.replace("application/", "").replace("image/", ""))
+        .join(", ");
+
+      return `
+        <div class="printer-card" data-printer-uri="${esc(p.uri)}">
+          <div class="printer-card-header">
+            <div class="printer-name-group">
+              <span class="printer-name">${esc(p.name)}</span>
+              <span class="badge badge-network">Wi-Fi / LAN</span>
+              <span class="badge ${supportsPDF ? "badge-ready" : "badge-virtual"}">${supportsPDF ? "PDF Direct" : "Raster / URF"}</span>
+              <span class="badge badge-usb">Port ${esc(String(p.port))}</span>
+            </div>
+          </div>
+          <div class="printer-details">
+            <span>Model: <strong>${esc(p.model || p.name)}</strong></span>
+            <span>Host: <strong>${esc(p.host)}</strong></span>
+            ${p.ip ? `<span>IP: <strong>${esc(p.ip)}</strong></span>` : ""}
+            <span title="${esc(p.uri)}">URI: <code>${esc(p.uri)}</code></span>
+            ${formats ? `<span class="muted" style="font-size:0.8rem">Format: ${esc(formats)}</span>` : ""}
+          </div>
+          <div class="printer-actions" style="margin-top:10px">
+            <button class="primary" data-action="test-network-printer" data-index="${idx}">
+              🖨️ Tes Cetak (IPP Direct)
+            </button>
+            <button data-action="copy-printer-uri" data-index="${idx}" title="Salin URI IPP untuk didaftarkan ke web farmasi">
+              📋 Salin URI
+            </button>
+            ${p.ip ? `<button data-action="open-printer-ip" data-ip="${esc(p.ip)}" title="Buka web admin printer">🌐 Web Admin</button>` : ""}
           </div>
         </div>
       `;
@@ -717,6 +819,74 @@ function bindEvents() {
           loadPrinters(true);
         });
         break;
+      case "refresh-network-printers":
+        withBusy(btn, async () => {
+          hideBanner("#network-printer-banner");
+          loadNetworkPrinters(true);
+        });
+        break;
+      case "test-network-printer": {
+        const idx = parseInt(btn.dataset.index, 10);
+        const p = state.networkPrinters && state.networkPrinters[idx];
+        if (!p) break;
+        const oldText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "Mengirim…";
+        hideBanner("#network-printer-banner");
+        try {
+          const port = state.config?.listen_port || 17891;
+          const host = (state.config?.listen_host === "0.0.0.0" || !state.config?.listen_host) ? "127.0.0.1" : state.config.listen_host;
+          const res = await fetch(`http://${host}:${port}/printers/test`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: p.name, uri: p.uri, mode: "bw", paper: "A4" }),
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.message || `HTTP ${res.status}`);
+          }
+          showBanner(
+            "#network-printer-banner",
+            `Uji cetak berhasil dikirim langsung via IPP ke "${p.name}" (${p.uri}). Silakan periksa hasil cetakan printer fisik.`,
+            true
+          );
+        } catch (err) {
+          showBanner(
+            "#network-printer-banner",
+            `Uji cetak ke "${p.name}" gagal: ${errorMessage(err)}`,
+            false
+          );
+        } finally {
+          btn.disabled = false;
+          btn.textContent = oldText;
+        }
+        break;
+      }
+      case "copy-printer-uri": {
+        const idx = parseInt(btn.dataset.index, 10);
+        const p = state.networkPrinters && state.networkPrinters[idx];
+        if (!p || !p.uri) break;
+        try {
+          if (navigator.clipboard) {
+            await navigator.clipboard.writeText(p.uri);
+          }
+          showBanner(
+            "#network-printer-banner",
+            `URI "${p.uri}" disalin ke papan klip! Anda dapat mendaftarkannya di pengaturan web RSISA.`,
+            true
+          );
+        } catch (err) {
+          showBanner("#network-printer-banner", `Gagal menyalin: ${errorMessage(err)}`, false);
+        }
+        break;
+      }
+      case "open-printer-ip": {
+        const ip = btn.dataset.ip;
+        if (ip) {
+          window.open(`http://${ip}`, "_blank");
+        }
+        break;
+      }
       case "apply-printer-port": {
         const idx = parseInt(btn.dataset.index, 10);
         const p = state.printerList && state.printerList[idx];
@@ -900,6 +1070,9 @@ function bindEvents() {
       if (!state.printerList || state.printerList.length === 0) {
         loadPrinters();
       }
+      if (!state.networkPrinters || state.networkPrinters.length === 0) {
+        loadNetworkPrinters();
+      }
     }
   };
 
@@ -980,7 +1153,7 @@ function renderMainShell() {
       <div class="tab-pane" id="pane-printers">
         <div class="card">
           <div class="section-heading">
-            <h2>Daftar Printer Terdeteksi</h2>
+            <h2>Daftar Printer Antrean OS</h2>
             <button data-action="refresh-printers">Deteksi Ulang</button>
           </div>
           <p class="muted">Antrean printer yang terpasang pada PC ini (USB, Serial, Wi-Fi, dan antrean OS). Printer berstatus <b>Ready</b> dapat langsung digunakan dan dipilih oleh aplikasi web dari LAN.</p>
@@ -988,6 +1161,19 @@ function renderMainShell() {
           <div class="banner" id="printer-banner" style="margin-top:8px"></div>
           <div class="printer-grid" id="printer-list" style="margin-top:12px">
             <p class="muted">Mendeteksi printer terpasang di OS…</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:16px">
+          <div class="section-heading">
+            <h2>Pencarian Jaringan (Bonjour / mDNS)</h2>
+            <button data-action="refresh-network-printers" class="secondary">🔍 Pindai Jaringan</button>
+          </div>
+          <p class="muted">Printer jaringan IPP/IPPS yang terdeteksi otomatis lewat protokol Bonjour/mDNS di subnet Wi-Fi/LAN lokal. Printer ini dapat langsung diuji cetak atau disalin URI-nya untuk didaftarkan ke sistem RSISA Farmasi.</p>
+          <div class="printer-stats" id="network-printer-stats" style="margin-top:12px"></div>
+          <div class="banner" id="network-printer-banner" style="margin-top:8px"></div>
+          <div class="printer-grid" id="network-printer-list" style="margin-top:12px">
+            <p class="muted">Memindai printer di jaringan via Bonjour/mDNS…</p>
           </div>
         </div>
       </div>
@@ -1209,6 +1395,7 @@ async function init() {
     }
     // Muat printer di latar belakang.
     await loadPrinters();
+    loadNetworkPrinters();
     renderSettings();
   } else {
     GetPrinterCount()
