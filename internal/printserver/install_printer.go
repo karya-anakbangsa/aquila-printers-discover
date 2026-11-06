@@ -108,8 +108,24 @@ func installWindowsNetworkPrinter(ctx context.Context, name, uri, model string) 
 $ErrorActionPreference = 'Stop'
 $printerName = %q
 $deviceUrl = %q
-if (!(Get-Printer -Name $printerName -ErrorAction SilentlyContinue)) {
-    Add-Printer -Name $printerName -DeviceURL $deviceUrl -ErrorAction Stop
+if ($deviceUrl -like "socket://*" -or $deviceUrl -like "tcp://*") {
+    $clean = $deviceUrl -replace "^[a-z]+://", ""
+    $parts = $clean -split ":"
+    $hostAddr = $parts[0]
+    $portNum = 9100
+    if ($parts.Length -gt 1) { [int]::TryParse($parts[1], [ref]$portNum) }
+    $portName = "IP_" + $hostAddr
+    if (!(Get-PrinterPort -Name $portName -ErrorAction SilentlyContinue)) {
+        Add-PrinterPort -Name $portName -PrinterHostAddress $hostAddr -PortNumber $portNum -ErrorAction SilentlyContinue
+    }
+    if (!(Get-Printer -Name $printerName -ErrorAction SilentlyContinue)) {
+        # Coba pasang dengan Generic / Text Only
+        Add-Printer -Name $printerName -PortName $portName -DriverName "Generic / Text Only" -ErrorAction SilentlyContinue
+    }
+} else {
+    if (!(Get-Printer -Name $printerName -ErrorAction SilentlyContinue)) {
+        Add-Printer -Name $printerName -DeviceURL $deviceUrl -ErrorAction Stop
+    }
 }
 `, name, uri)
 

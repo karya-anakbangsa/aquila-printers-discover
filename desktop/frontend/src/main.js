@@ -279,13 +279,29 @@ function renderPrinters(error = null) {
     else if (p.connection_type === "serial") serialCount++;
   });
 
+  // Filter hanya printer berstatus Ready untuk tab Printer OS
+  const readyList = list
+    .map((p, origIdx) => ({ ...p, _origIndex: origIdx }))
+    .filter((p) => (p.state || "").toLowerCase() === "ready" || p.is_ready);
+
   if (statsEl) {
     statsEl.innerHTML = `
-      <div class="printer-stat-chip">Total Printer: <b>${list.length}</b></div>
+      <div class="printer-stat-chip">Printer Siap (Ready): <b>${readyList.length}</b></div>
+      <div class="printer-stat-chip">Total Terpasang: <b>${list.length}</b></div>
       <div class="printer-stat-chip">USB: <b>${usbCount}</b></div>
       <div class="printer-stat-chip">Wi-Fi / LAN: <b>${netCount}</b></div>
       ${serialCount > 0 ? `<div class="printer-stat-chip">Serial: <b>${serialCount}</b></div>` : ""}
     `;
+  }
+
+  if (readyList.length === 0) {
+    listEl.innerHTML = `
+      <div class="card" style="background:var(--bg);border-style:dashed;text-align:center;padding:24px 16px">
+        <p style="font-weight:600;margin-bottom:6px">Tidak ada printer OS yang berstatus Ready</p>
+        <p class="muted">Ditemukan ${list.length} printer di OS, tetapi seluruhnya saat ini berstatus Offline atau nonaktif. Pastikan kabel printer terhubung dan printer dinyalakan.</p>
+      </div>
+    `;
+    return;
   }
 
   const connBadge = (p) => {
@@ -320,8 +336,9 @@ function renderPrinters(error = null) {
 
   const availablePorts = state.availablePorts || [];
 
-  listEl.innerHTML = list
-    .map((p, idx) => {
+  listEl.innerHTML = readyList
+    .map((p) => {
+      const idx = p._origIndex;
       const isThermal = p.printer_type === "thermal" || p.connection_type === "serial" || /POS|THERMAL|RECEIPT|STRUK|KASIR|58MM|80MM|XP-|TM-/i.test(p.name + " " + (p.driver || ""));
       const currentPort = (p.port || "").trim();
       
@@ -401,14 +418,14 @@ function renderNetworkPrinters(error = null) {
   }
 
   if (state.loadingNetworkPrinters && !state.networkPrinters) {
-    listEl.innerHTML = '<p class="muted">Sedang memindai jaringan Wi-Fi/LAN (Bonjour / mDNS)…</p>';
+    listEl.innerHTML = '<p class="muted">Sedang memindai jaringan Wi-Fi/LAN (Bonjour / mDNS & Active LAN)…</p>';
     if (statsEl) statsEl.innerHTML = "";
     return;
   }
 
   const list = state.networkPrinters || [];
   if (list.length === 0) {
-    listEl.innerHTML = '<p class="muted">Belum ada printer jaringan ditemukan via Bonjour/mDNS. Pastikan printer jaringan menyala dan berada pada Wi-Fi/LAN yang sama dengan PC ini.</p>';
+    listEl.innerHTML = '<p class="muted">Belum ada printer jaringan ditemukan. Pastikan printer jaringan menyala dan berada pada Wi-Fi/LAN yang sama dengan PC ini.</p>';
     if (statsEl) statsEl.innerHTML = "";
     return;
   }
@@ -465,7 +482,7 @@ function renderNetworkPrinters(error = null) {
               </button>
             ` : ""}
             <button class="primary" data-action="test-network-printer" data-index="${idx}">
-              ${ICONS.printer} Tes Cetak Langsung (IPP)
+              ${ICONS.printer} Tes Cetak Langsung (${p.port === 9100 ? "RAW" : "IPP"})
             </button>
             <button data-action="copy-printer-uri" data-index="${idx}" title="Salin URI printer untuk didaftarkan ke aplikasi RSISA Farmasi">
               ${ICONS.copy} Salin Alamat URI
@@ -1122,6 +1139,26 @@ function bindEvents() {
     switchTab(btn.dataset.tab);
   });
 
+  $("#printer-subtabs")?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("[data-subtab]");
+    if (!btn) return;
+    const subtab = btn.dataset.subtab;
+    document.querySelectorAll("#printer-subtabs button").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    const osView = $("#printer-os-view");
+    const bonjourView = $("#printer-bonjour-view");
+    if (subtab === "printer-os") {
+      if (osView) osView.style.display = "flex";
+      if (bonjourView) bonjourView.style.display = "none";
+    } else if (subtab === "printer-bonjour") {
+      if (osView) osView.style.display = "none";
+      if (bonjourView) bonjourView.style.display = "flex";
+      if (!state.networkPrinters || state.networkPrinters.length === 0) {
+        loadNetworkPrinters();
+      }
+    }
+  });
+
   document.addEventListener("click", (ev) => {
     const gotoBtn = ev.target.closest("[data-tab-goto]");
     if (gotoBtn) {
@@ -1191,29 +1228,42 @@ function renderMainShell() {
       </div>
 
       <div class="tab-pane" id="pane-printers">
-        <div class="card">
-          <div class="section-heading">
-            <h2>Daftar Printer Antrean OS</h2>
-            <button data-action="refresh-printers">${ICONS.search} Deteksi Ulang</button>
-          </div>
-          <p class="muted">Antrean printer yang terpasang pada PC ini (USB, Serial, Wi-Fi, dan antrean OS). Printer berstatus <b>Ready</b> dapat langsung digunakan dan dipilih oleh aplikasi web dari LAN.</p>
-          <div class="printer-stats" id="printer-stats" style="margin-top:12px"></div>
-          <div class="banner" id="printer-banner" style="margin-top:8px"></div>
-          <div class="printer-grid" id="printer-list" style="margin-top:12px">
-            <p class="muted">Mendeteksi printer terpasang di OS…</p>
+        <div class="sub-tabs" id="printer-subtabs">
+          <button class="active" data-subtab="printer-os">
+            ${ICONS.printer} Printer OS
+          </button>
+          <button data-subtab="printer-bonjour">
+            ${ICONS.search} Printer Bonjour
+          </button>
+        </div>
+
+        <div class="printer-subview" id="printer-os-view">
+          <div class="card">
+            <div class="section-heading">
+              <h2>Daftar Printer Antrean OS (Ready)</h2>
+              <button data-action="refresh-printers">${ICONS.search} Deteksi Ulang</button>
+            </div>
+            <p class="muted">Antrean printer yang terpasang pada PC ini dan berstatus <b>Ready</b> (siap digunakan). Printer offline disembunyikan otomatis.</p>
+            <div class="printer-stats" id="printer-stats" style="margin-top:12px"></div>
+            <div class="banner" id="printer-banner" style="margin-top:8px"></div>
+            <div class="printer-grid" id="printer-list" style="margin-top:12px">
+              <p class="muted">Mendeteksi printer terpasang di OS…</p>
+            </div>
           </div>
         </div>
 
-        <div class="card" style="margin-top:16px">
-          <div class="section-heading">
-            <h2>Pencarian Jaringan (Bonjour / mDNS)</h2>
-            <button data-action="refresh-network-printers" class="secondary">${ICONS.search} Pindai Jaringan</button>
-          </div>
-          <p class="muted">Printer jaringan IPP/IPPS yang terdeteksi otomatis lewat protokol Bonjour/mDNS di subnet Wi-Fi/LAN lokal. Printer ini dapat langsung diuji cetak atau disalin URI-nya untuk didaftarkan ke sistem RSISA Farmasi.</p>
-          <div class="printer-stats" id="network-printer-stats" style="margin-top:12px"></div>
-          <div class="banner" id="network-printer-banner" style="margin-top:8px"></div>
-          <div class="printer-grid" id="network-printer-list" style="margin-top:12px">
-            <p class="muted">Memindai printer di jaringan via Bonjour/mDNS…</p>
+        <div class="printer-subview" id="printer-bonjour-view" style="display:none">
+          <div class="card">
+            <div class="section-heading">
+              <h2>Pencarian Jaringan (Bonjour / mDNS & Active LAN)</h2>
+              <button data-action="refresh-network-printers" class="secondary">${ICONS.search} Pindai Jaringan</button>
+            </div>
+            <p class="muted">Seluruh printer jaringan (IPP, IPPS, dan RAW Port 9100) yang terdeteksi di subnet Wi-Fi/LAN lokal. Printer ini dapat langsung diuji cetak, dipasang ke sistem operasi, atau disalin URI-nya untuk RSISA Farmasi.</p>
+            <div class="printer-stats" id="network-printer-stats" style="margin-top:12px"></div>
+            <div class="banner" id="network-printer-banner" style="margin-top:8px"></div>
+            <div class="printer-grid" id="network-printer-list" style="margin-top:12px">
+              <p class="muted">Memindai printer di jaringan via Bonjour/mDNS & Active LAN…</p>
+            </div>
           </div>
         </div>
       </div>
