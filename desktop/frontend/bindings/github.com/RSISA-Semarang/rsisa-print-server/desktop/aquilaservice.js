@@ -232,6 +232,15 @@ export function ReloadConfig() {
 }
 
 /**
+ * RemoveNetworkPrinter menghapus printer jaringan dari antrean sistem operasi (OS) komputer ini.
+ * @param {string} name
+ * @returns {$CancellablePromise<void>}
+ */
+export function RemoveNetworkPrinter(name) {
+    return $Call.ByID(2072493200, name);
+}
+
+/**
  * RemoveOrigin menghapus alamat asal pada posisi index.
  * @param {number} index
  * @returns {$CancellablePromise<void>}

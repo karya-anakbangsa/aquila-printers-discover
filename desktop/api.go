@@ -193,6 +193,11 @@ func (s *AquilaService) InstallNetworkPrinter(name, uri, model string) error {
 	return s.core.InstallNetworkPrinter(name, uri, model)
 }
 
+// RemoveNetworkPrinter menghapus printer jaringan dari antrean sistem operasi (OS) komputer ini.
+func (s *AquilaService) RemoveNetworkPrinter(name string) error {
+	return s.core.RemoveNetworkPrinter(name)
+}
+
 // TestPrinter mengirimkan tes cetak ke printer tertentu dari aplikasi desktop.
 func (s *AquilaService) TestPrinter(name, uri, mode string) error {
 	return s.core.TestPrinter(name, uri, mode)

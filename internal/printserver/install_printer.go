@@ -136,3 +136,71 @@ if ($deviceUrl -like "socket://*" -or $deviceUrl -like "tcp://*") {
 	return nil
 }
 
+// RemoveNetworkPrinter menghapus printer antrean dari sistem operasi (Windows / macOS / Linux).
+func RemoveNetworkPrinter(ctx context.Context, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("nama printer tidak boleh kosong")
+	}
+
+	switch runtime.GOOS {
+	case "darwin", "linux":
+		queueName := SanitizeCUPSQueueName(name)
+		lpadminPath := "lpadmin"
+		if _, err := exec.LookPath(lpadminPath); err != nil {
+			if _, errSub := exec.LookPath("/usr/sbin/lpadmin"); errSub == nil {
+				lpadminPath = "/usr/sbin/lpadmin"
+			}
+		}
+		cmd := exec.CommandContext(ctx, lpadminPath, "-x", queueName)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("lpadmin -x gagal: %s (%w)", strings.TrimSpace(string(output)), err)
+		}
+		return nil
+	case "windows":
+		script := fmt.Sprintf(`
+$ErrorActionPreference = 'Continue'
+$target = %q
+$targets = @()
+$exact = Get-Printer -Name $target -ErrorAction SilentlyContinue
+if ($exact) {
+    $targets += $exact
+} else {
+    $similar = Get-Printer | Where-Object { 
+        $_.Name -eq $target -or 
+        $_.Name -like "*$target*" -or 
+        $target -like "*$($_.Name)*" 
+    }
+    if ($similar) {
+        $targets += $similar
+    }
+}
+
+foreach ($p in $targets) {
+    $pName = $p.Name
+    Get-PrintJob -PrinterName $pName -ErrorAction SilentlyContinue | Remove-PrintJob -ErrorAction SilentlyContinue
+    Remove-Printer -Name $pName -ErrorAction SilentlyContinue
+    if (Get-Printer -Name $pName -ErrorAction SilentlyContinue) {
+        (Get-CimInstance Win32_Printer -Filter "Name='$pName'" -ErrorAction SilentlyContinue) | Remove-CimInstance -ErrorAction SilentlyContinue
+    }
+    if (Get-Printer -Name $pName -ErrorAction SilentlyContinue) {
+        & rundll32.exe printui.dll,PrintUIEntry /dl /n "$pName"
+    }
+}
+
+if ($targets.Count -eq 0) {
+    & rundll32.exe printui.dll,PrintUIEntry /dl /n $target
+}
+`, name)
+		output, err := hiddenWindowsCommand(ctx, script).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("gagal menghapus printer dari Windows: %s (%w)", strings.TrimSpace(string(output)), err)
+		}
+		return nil
+	default:
+		return fmt.Errorf("OS %q belum didukung untuk penghapusan printer", runtime.GOOS)
+	}
+}
+
+

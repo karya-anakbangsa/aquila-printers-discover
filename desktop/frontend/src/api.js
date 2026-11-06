@@ -21,6 +21,7 @@ export {
   HidePopup,
   ImportConfig,
   InstallNetworkPrinter,
+  RemoveNetworkPrinter,
   OpenConfigFolder,
   OpenServerURL,
   QuitApp,

@@ -463,6 +463,20 @@ func (c *Core) InstallNetworkPrinter(name, uri, model string) error {
 	return nil
 }
 
+// RemoveNetworkPrinter menghapus printer jaringan dari antrean sistem operasi (OS) komputer ini.
+func (c *Core) RemoveNetworkPrinter(name string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	c.log("INFO", fmt.Sprintf("menghapus printer %s dari sistem operasi...", name))
+	err := printserver.RemoveNetworkPrinter(ctx, name)
+	if err != nil {
+		c.log("ERROR", fmt.Sprintf("gagal menghapus printer %s dari OS: %v", name, err))
+		return err
+	}
+	c.log("INFO", fmt.Sprintf("printer %s berhasil dihapus dari sistem operasi", name))
+	return nil
+}
+
 // TestPrinter mengirim dokumen tes cetak ke printer tertentu dari aplikasi desktop.
 func (c *Core) TestPrinter(name, uri, mode string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

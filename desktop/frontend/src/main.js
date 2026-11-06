@@ -19,6 +19,7 @@ import {
   GetState,
   ImportConfig,
   InstallNetworkPrinter,
+  RemoveNetworkPrinter,
   OpenConfigFolder,
   OpenServerURL,
   QuitApp,
@@ -449,9 +450,12 @@ function renderNetworkPrinters(error = null) {
 
       const normNetName = normalizePrinterName(p.name);
       const normModel = normalizePrinterName(p.model || "");
-      const isInstalled = installedQueues.some(
-        (q) => q === normNetName || (normModel && q === normModel) || (q.length > 3 && normNetName.includes(q)) || (normNetName.length > 3 && q.includes(normNetName))
-      );
+      const matchingInstalled = (state.printerList || []).find((lp) => {
+        const q = normalizePrinterName(lp.name);
+        return q === normNetName || (normModel && q === normModel) || (q.length > 3 && normNetName.includes(q)) || (normNetName.length > 3 && q.includes(normNetName));
+      });
+      const isInstalled = !!matchingInstalled;
+      const installedTargetName = matchingInstalled ? matchingInstalled.name : p.name;
 
       return `
         <div class="printer-card" data-printer-uri="${esc(p.uri)}">
@@ -476,16 +480,23 @@ function renderNetworkPrinters(error = null) {
             ${formats ? `<span class="muted" style="font-size:0.8rem">Format: ${esc(formats)}</span>` : ""}
           </div>
           <div class="printer-actions" style="margin-top:10px">
-            ${!isInstalled ? `
-              <button class="secondary" data-action="install-device-printer" data-index="${idx}" title="Pasang printer ini langsung ke pengaturan antrean sistem operasi (OS) komputer ini">
-                ${ICONS.plus} Pasang ke Komputer Ini
-              </button>
-            ` : ""}
+            ${
+              isInstalled
+                ? `<button class="warning" data-action="remove-device-printer" data-index="${idx}" data-installed-name="${esc(installedTargetName)}" title="Hapus printer ini dari antrean sistem operasi (OS) komputer ini">
+                    ${ICONS.trash} Lepas dari Komputer
+                  </button>`
+                : `<button class="secondary" data-action="install-device-printer" data-index="${idx}" title="Pasang printer ini langsung ke pengaturan antrean sistem operasi (OS) komputer ini">
+                    ${ICONS.plus} Pasang ke Komputer Ini
+                  </button>`
+            }
             <button class="primary" data-action="test-network-printer" data-index="${idx}">
               ${ICONS.printer} Tes Cetak Langsung (${p.port === 9100 ? "RAW" : "IPP"})
             </button>
             <button data-action="copy-printer-uri" data-index="${idx}" title="Salin URI printer untuk didaftarkan ke aplikasi RSISA Farmasi">
               ${ICONS.copy} Salin Alamat URI
+            </button>
+            <button class="icon-btn danger" data-action="remove-bonjour-printer" data-index="${idx}" title="Hapus printer ini dari daftar pencarian Bonjour">
+              ${ICONS.trash} Hapus Printer
             </button>
           </div>
         </div>
@@ -919,6 +930,75 @@ function bindEvents() {
           showBanner(
             "#network-printer-banner",
             `Gagal memasang printer "${p.name}": ${errorMessage(err)}`,
+            false
+          );
+          btn.disabled = false;
+          btn.innerHTML = oldHTML;
+        }
+        break;
+      }
+      case "remove-device-printer": {
+        const idx = parseInt(btn.dataset.index, 10);
+        const p = state.networkPrinters && state.networkPrinters[idx];
+        if (!p) break;
+        const targetName = (btn.dataset.installedName || p.name).trim();
+        const oldHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `${ICONS.trash} Melepaskan…`;
+        hideBanner("#network-printer-banner");
+        try {
+          await RemoveNetworkPrinter(targetName);
+          showBanner(
+            "#network-printer-banner",
+            `Printer "${targetName}" berhasil dilepas dari antrean sistem operasi (OS).`,
+            true
+          );
+          await loadPrinters(true);
+          renderNetworkPrinters();
+        } catch (err) {
+          showBanner(
+            "#network-printer-banner",
+            `Gagal melepas printer "${targetName}" dari OS: ${errorMessage(err)}`,
+            false
+          );
+          btn.disabled = false;
+          btn.innerHTML = oldHTML;
+        }
+        break;
+      }
+      case "remove-bonjour-printer": {
+        const idx = parseInt(btn.dataset.index, 10);
+        const p = state.networkPrinters && state.networkPrinters[idx];
+        if (!p) break;
+        const oldHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `${ICONS.trash} Menghapus…`;
+        hideBanner("#network-printer-banner");
+        try {
+          // Bila terpasang di OS, coba copot juga dari OS
+          const normNetName = normalizePrinterName(p.name);
+          const installedQueues = (state.printerList || []).map((lp) => normalizePrinterName(lp.name));
+          const isInstalled = installedQueues.some(
+            (q) => q === normNetName || (normNetName.length > 3 && q.includes(normNetName))
+          );
+          if (isInstalled && typeof RemoveNetworkPrinter === "function") {
+            try {
+              await RemoveNetworkPrinter(p.name);
+              await loadPrinters(true);
+            } catch (_) {}
+          }
+          // Hapus printer dari daftar Bonjour saat ini
+          state.networkPrinters = state.networkPrinters.filter((_, i) => i !== idx);
+          renderNetworkPrinters();
+          showBanner(
+            "#network-printer-banner",
+            `Printer "${p.name}" berhasil dihapus dari daftar Bonjour.`,
+            true
+          );
+        } catch (err) {
+          showBanner(
+            "#network-printer-banner",
+            `Gagal menghapus printer: ${errorMessage(err)}`,
             false
           );
           btn.disabled = false;
