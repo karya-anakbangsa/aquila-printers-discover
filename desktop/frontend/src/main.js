@@ -7,6 +7,7 @@ import {
   ClearPrinterQueue,
   CopyServerAddress,
   DiagnosePort,
+  DiscoverNetworkPrinters,
   ExportConfig,
   GetAutostart,
   GetConfig,
@@ -17,6 +18,8 @@ import {
   GetSettings,
   GetState,
   ImportConfig,
+  InstallNetworkPrinter,
+  RemoveNetworkPrinter,
   OpenConfigFolder,
   OpenServerURL,
   QuitApp,
@@ -46,6 +49,20 @@ const MAX_LOG_LINES = 200;
 const isPopup = new URLSearchParams(location.search).has("popup");
 
 // State ringkas di memori; hanya objek kecil yang disimpan, tanpa cache besar.
+// Ikon SVG vektor modern (menggantikan emoji untuk konsistensi di Windows, Mac, dan Linux)
+const ICONS = {
+  printer: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>`,
+  copy: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`,
+  search: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>`,
+  trash: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`,
+  plus: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
+  check: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+};
+
+function normalizePrinterName(val) {
+  return (val || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 const state = {
   service: null,
   config: null,
@@ -55,6 +72,8 @@ const state = {
   printers: -1, // -1 = belum dimuat
   printerList: null,
   loadingPrinters: false,
+  networkPrinters: null,
+  loadingNetworkPrinters: false,
   editingIndex: -1,
   savingOrigin: false,
   autoscroll: true,
@@ -261,13 +280,29 @@ function renderPrinters(error = null) {
     else if (p.connection_type === "serial") serialCount++;
   });
 
+  // Filter hanya printer berstatus Ready untuk tab Printer OS
+  const readyList = list
+    .map((p, origIdx) => ({ ...p, _origIndex: origIdx }))
+    .filter((p) => (p.state || "").toLowerCase() === "ready" || p.is_ready);
+
   if (statsEl) {
     statsEl.innerHTML = `
-      <div class="printer-stat-chip">Total Printer: <b>${list.length}</b></div>
+      <div class="printer-stat-chip">Printer Siap (Ready): <b>${readyList.length}</b></div>
+      <div class="printer-stat-chip">Total Terpasang: <b>${list.length}</b></div>
       <div class="printer-stat-chip">USB: <b>${usbCount}</b></div>
       <div class="printer-stat-chip">Wi-Fi / LAN: <b>${netCount}</b></div>
       ${serialCount > 0 ? `<div class="printer-stat-chip">Serial: <b>${serialCount}</b></div>` : ""}
     `;
+  }
+
+  if (readyList.length === 0) {
+    listEl.innerHTML = `
+      <div class="card" style="background:var(--bg);border-style:dashed;text-align:center;padding:24px 16px">
+        <p style="font-weight:600;margin-bottom:6px">Tidak ada printer OS yang berstatus Ready</p>
+        <p class="muted">Ditemukan ${list.length} printer di OS, tetapi seluruhnya saat ini berstatus Offline atau nonaktif. Pastikan kabel printer terhubung dan printer dinyalakan.</p>
+      </div>
+    `;
+    return;
   }
 
   const connBadge = (p) => {
@@ -302,11 +337,12 @@ function renderPrinters(error = null) {
 
   const availablePorts = state.availablePorts || [];
 
-  listEl.innerHTML = list
-    .map((p, idx) => {
+  listEl.innerHTML = readyList
+    .map((p) => {
+      const idx = p._origIndex;
       const isThermal = p.printer_type === "thermal" || p.connection_type === "serial" || /POS|THERMAL|RECEIPT|STRUK|KASIR|58MM|80MM|XP-|TM-/i.test(p.name + " " + (p.driver || ""));
       const currentPort = (p.port || "").trim();
-
+      
       // Susun opsi port: port saat ini + port yang terdeteksi
       const portOptions = [...new Set([currentPort, ...availablePorts].filter(Boolean))].sort();
 
@@ -331,14 +367,134 @@ function renderPrinters(error = null) {
           <!-- Aksi Cepat & Uji Cetak Dinamis (Plug & Play) -->
           <div class="printer-actions" style="margin-top:10px">
             <button class="primary" data-action="test-auto-printer" data-index="${idx}">
-              🖨️ Tes Cetak (${isThermal ? 'Struk Thermal' : 'Dokumen'})
+              ${ICONS.printer} Tes Cetak (${isThermal ? 'Struk Thermal' : 'Dokumen'})
             </button>
             ${
               !isThermal
                 ? `<button data-action="test-raw-printer" data-index="${idx}" title="Uji kirim byte mentah">Tes Mode RAW</button>`
                 : `<button class="secondary" data-action="test-doc-printer" data-index="${idx}" title="Uji kirim format Windows GDI">Tes Cetak Dokumen</button>`
             }
-            <button class="icon-btn danger" data-action="clear-printer-queue" data-index="${idx}" title="Hapus seluruh dokumen macet di printer ini">Bersihkan Antrean</button>
+            <button class="icon-btn danger" data-action="clear-printer-queue" data-index="${idx}" title="Hapus seluruh dokumen macet di printer ini">${ICONS.trash} Bersihkan Antrean</button>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function loadNetworkPrinters(force = false) {
+  if (typeof DiscoverNetworkPrinters !== "function") return Promise.resolve();
+  if (state.loadingNetworkPrinters && !force) return state.networkPrintersPromise || Promise.resolve();
+  state.loadingNetworkPrinters = true;
+  const listEl = $("#network-printer-list");
+  if (listEl && (!state.networkPrinters || force)) {
+    listEl.innerHTML = '<p class="muted">Memindai printer di jaringan via Bonjour/mDNS…</p>';
+  }
+  // Panggil langsung ke Go lewat binding Wails (bukan fetch HTTP), karena
+  // WebView desktop bukan origin yang diizinkan oleh print server lokal.
+  state.networkPrintersPromise = Promise.resolve()
+    .then(() => DiscoverNetworkPrinters())
+    .then((list) => {
+      state.networkPrinters = Array.isArray(list) ? list : [];
+      state.loadingNetworkPrinters = false;
+      renderNetworkPrinters();
+    })
+    .catch((err) => {
+      state.loadingNetworkPrinters = false;
+      state.networkPrinters = [];
+      renderNetworkPrinters(err);
+    });
+  return state.networkPrintersPromise;
+}
+
+function renderNetworkPrinters(error = null) {
+  const listEl = $("#network-printer-list");
+  const statsEl = $("#network-printer-stats");
+  if (!listEl) return;
+
+  if (error) {
+    listEl.innerHTML = `<p class="muted" style="color:var(--err)">Pencarian mDNS gagal: ${esc(errorMessage(error))}</p>`;
+    if (statsEl) statsEl.innerHTML = "";
+    return;
+  }
+
+  if (state.loadingNetworkPrinters && !state.networkPrinters) {
+    listEl.innerHTML = '<p class="muted">Sedang memindai jaringan Wi-Fi/LAN (Bonjour / mDNS & Active LAN)…</p>';
+    if (statsEl) statsEl.innerHTML = "";
+    return;
+  }
+
+  const list = state.networkPrinters || [];
+  if (list.length === 0) {
+    listEl.innerHTML = '<p class="muted">Belum ada printer jaringan ditemukan. Pastikan printer jaringan menyala dan berada pada Wi-Fi/LAN yang sama dengan PC ini.</p>';
+    if (statsEl) statsEl.innerHTML = "";
+    return;
+  }
+
+  const pdfCount = list.filter((p) => (p.pdl || []).includes("application/pdf")).length;
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <div class="printer-stat-chip">Printer Jaringan: <b>${list.length}</b></div>
+      <div class="printer-stat-chip">Mendukung PDF Direct: <b>${pdfCount}</b></div>
+    `;
+  }
+
+  const installedQueues = (state.printerList || []).map((lp) => normalizePrinterName(lp.name));
+
+  listEl.innerHTML = list
+    .map((p, idx) => {
+      const supportsPDF = (p.pdl || []).includes("application/pdf");
+      const formats = (p.pdl || [])
+        .map((f) => f.replace("application/", "").replace("image/", ""))
+        .join(", ");
+
+      const normNetName = normalizePrinterName(p.name);
+      const normModel = normalizePrinterName(p.model || "");
+      const matchingInstalled = (state.printerList || []).find((lp) => {
+        const q = normalizePrinterName(lp.name);
+        return q === normNetName || (normModel && q === normModel) || (q.length > 3 && normNetName.includes(q)) || (normNetName.length > 3 && q.includes(normNetName));
+      });
+      const isInstalled = !!matchingInstalled;
+      const installedTargetName = matchingInstalled ? matchingInstalled.name : p.name;
+
+      return `
+        <div class="printer-card" data-printer-uri="${esc(p.uri)}">
+          <div class="printer-card-header">
+            <div class="printer-name-group">
+              <span class="printer-name">${esc(p.name)}</span>
+              <span class="badge badge-network">Wi-Fi / LAN</span>
+              <span class="badge ${supportsPDF ? "badge-ready" : "badge-virtual"}">${supportsPDF ? "PDF Direct" : "Raster / URF"}</span>
+              <span class="badge badge-usb">Port ${esc(String(p.port))}</span>
+            </div>
+            ${isInstalled ? `
+              <span class="badge badge-ready" style="padding:4px 9px;font-size:0.8rem;display:inline-flex;align-items:center;gap:4px">
+                ${ICONS.check} Terpasang di OS
+              </span>
+            ` : ""}
+          </div>
+          <div class="printer-details">
+            <span>Model: <strong>${esc(p.model || p.name)}</strong></span>
+            <span>Host: <strong>${esc(p.host)}</strong></span>
+            ${p.ip ? `<span>IP: <strong>${esc(p.ip)}</strong></span>` : ""}
+            <span title="${esc(p.uri)}">URI: <code>${esc(p.uri)}</code></span>
+            ${formats ? `<span class="muted" style="font-size:0.8rem">Format: ${esc(formats)}</span>` : ""}
+          </div>
+          <div class="printer-actions" style="margin-top:10px">
+            ${
+              isInstalled
+                ? `<button class="warning" data-action="remove-device-printer" data-index="${idx}" data-installed-name="${esc(installedTargetName)}" title="Hapus printer ini dari antrean sistem operasi (OS) komputer ini">
+                    ${ICONS.trash} Lepas dari Komputer
+                  </button>`
+                : `<button class="secondary" data-action="install-device-printer" data-index="${idx}" title="Pasang printer ini langsung ke pengaturan antrean sistem operasi (OS) komputer ini">
+                    ${ICONS.plus} Pasang ke Komputer Ini
+                  </button>`
+            }
+            <button data-action="copy-printer-uri" data-index="${idx}" title="Salin URI printer untuk didaftarkan ke aplikasi RSISA Farmasi">
+              ${ICONS.copy} Salin Alamat URI
+            </button>
+            <button class="icon-btn danger" data-action="remove-bonjour-printer" data-index="${idx}" title="Hapus printer ini dari daftar pencarian Bonjour">
+              ${ICONS.trash} Hapus Printer
+            </button>
           </div>
         </div>
       `;
@@ -717,6 +873,155 @@ function bindEvents() {
           loadPrinters(true);
         });
         break;
+      case "refresh-network-printers":
+        withBusy(btn, async () => {
+          hideBanner("#network-printer-banner");
+          loadNetworkPrinters(true);
+        });
+        break;
+      case "test-network-printer": {
+        const idx = parseInt(btn.dataset.index, 10);
+        const p = state.networkPrinters && state.networkPrinters[idx];
+        if (!p) break;
+        const oldHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `${ICONS.printer} Mengirim…`;
+        hideBanner("#network-printer-banner");
+        try {
+          const testMode = (p.port === 9100 || (p.uri && p.uri.startsWith("socket://"))) ? "raw" : "bw";
+          await TestPrinter(p.name, p.uri, testMode);
+          showBanner(
+            "#network-printer-banner",
+            `Uji cetak berhasil dikirim ke "${p.name}". Silakan periksa hasil cetakan printer fisik.`,
+            true
+          );
+        } catch (err) {
+          showBanner(
+            "#network-printer-banner",
+            `Uji cetak ke "${p.name}" gagal: ${errorMessage(err)}`,
+            false
+          );
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = oldHTML;
+        }
+        break;
+      }
+      case "install-device-printer": {
+        const idx = parseInt(btn.dataset.index, 10);
+        const p = state.networkPrinters && state.networkPrinters[idx];
+        if (!p) break;
+        const oldHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `${ICONS.plus} Memasang ke OS…`;
+        hideBanner("#network-printer-banner");
+        try {
+          await InstallNetworkPrinter(p.name, p.uri, p.model || p.name);
+          showBanner(
+            "#network-printer-banner",
+            `Printer "${p.name}" berhasil dipasang ke sistem operasi komputer ini! Antrean sekarang tersedia di antrean OS lokal.`,
+            true
+          );
+          await loadPrinters(true);
+          renderNetworkPrinters();
+        } catch (err) {
+          showBanner(
+            "#network-printer-banner",
+            `Gagal memasang printer "${p.name}": ${errorMessage(err)}`,
+            false
+          );
+          btn.disabled = false;
+          btn.innerHTML = oldHTML;
+        }
+        break;
+      }
+      case "remove-device-printer": {
+        const idx = parseInt(btn.dataset.index, 10);
+        const p = state.networkPrinters && state.networkPrinters[idx];
+        if (!p) break;
+        const targetName = (btn.dataset.installedName || p.name).trim();
+        const oldHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `${ICONS.trash} Melepaskan…`;
+        hideBanner("#network-printer-banner");
+        try {
+          await RemoveNetworkPrinter(targetName);
+          showBanner(
+            "#network-printer-banner",
+            `Printer "${targetName}" berhasil dilepas dari antrean sistem operasi (OS).`,
+            true
+          );
+          await loadPrinters(true);
+          renderNetworkPrinters();
+        } catch (err) {
+          showBanner(
+            "#network-printer-banner",
+            `Gagal melepas printer "${targetName}" dari OS: ${errorMessage(err)}`,
+            false
+          );
+          btn.disabled = false;
+          btn.innerHTML = oldHTML;
+        }
+        break;
+      }
+      case "remove-bonjour-printer": {
+        const idx = parseInt(btn.dataset.index, 10);
+        const p = state.networkPrinters && state.networkPrinters[idx];
+        if (!p) break;
+        const oldHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `${ICONS.trash} Menghapus…`;
+        hideBanner("#network-printer-banner");
+        try {
+          // Bila terpasang di OS, coba copot juga dari OS
+          const normNetName = normalizePrinterName(p.name);
+          const installedQueues = (state.printerList || []).map((lp) => normalizePrinterName(lp.name));
+          const isInstalled = installedQueues.some(
+            (q) => q === normNetName || (normNetName.length > 3 && q.includes(normNetName))
+          );
+          if (isInstalled && typeof RemoveNetworkPrinter === "function") {
+            try {
+              await RemoveNetworkPrinter(p.name);
+              await loadPrinters(true);
+            } catch (_) {}
+          }
+          // Hapus printer dari daftar Bonjour saat ini
+          state.networkPrinters = state.networkPrinters.filter((_, i) => i !== idx);
+          renderNetworkPrinters();
+          showBanner(
+            "#network-printer-banner",
+            `Printer "${p.name}" berhasil dihapus dari daftar Bonjour.`,
+            true
+          );
+        } catch (err) {
+          showBanner(
+            "#network-printer-banner",
+            `Gagal menghapus printer: ${errorMessage(err)}`,
+            false
+          );
+          btn.disabled = false;
+          btn.innerHTML = oldHTML;
+        }
+        break;
+      }
+      case "copy-printer-uri": {
+        const idx = parseInt(btn.dataset.index, 10);
+        const p = state.networkPrinters && state.networkPrinters[idx];
+        if (!p || !p.uri) break;
+        try {
+          if (navigator.clipboard) {
+            await navigator.clipboard.writeText(p.uri);
+          }
+          showBanner(
+            "#network-printer-banner",
+            `URI "${p.uri}" disalin ke papan klip! Anda dapat mendaftarkannya di pengaturan web RSISA.`,
+            true
+          );
+        } catch (err) {
+          showBanner("#network-printer-banner", `Gagal menyalin: ${errorMessage(err)}`, false);
+        }
+        break;
+      }
       case "apply-printer-port": {
         const idx = parseInt(btn.dataset.index, 10);
         const p = state.printerList && state.printerList[idx];
@@ -798,9 +1103,9 @@ function bindEvents() {
         let mode = "auto";
         if (action === "test-raw-printer") mode = "raw";
         else if (action === "test-doc-printer") mode = "bw";
-        const oldText = btn.textContent;
+        const oldHTML = btn.innerHTML;
         btn.disabled = true;
-        btn.textContent = "Mengirim…";
+        btn.innerHTML = `${ICONS.printer} Mengirim…`;
         hideBanner("#printer-banner");
         try {
           // Tentukan mode dinamis: jika thermal gunakan raw (ESC/POS), jika printer biasa gunakan bw (GDI Dokumen)
@@ -837,13 +1142,13 @@ function bindEvents() {
           } catch (rpcErr) {
             showBanner(
               "#printer-banner",
-              `Uji cetak ke "${p.name}" gagal: ${errorMessage(fetchErr || rpcErr)}`,
+              `Uji cetak ke "${p.name}" gagal: ${errorMessage(rpcErr || fetchErr)}`,
               false
             );
           }
         } finally {
           btn.disabled = false;
-          btn.textContent = oldText;
+          btn.innerHTML = oldHTML;
           GetLogs().then((logs) => {
             const view = $("#log-view");
             if (view && logs) {
@@ -900,6 +1205,9 @@ function bindEvents() {
       if (!state.printerList || state.printerList.length === 0) {
         loadPrinters();
       }
+      if (!state.networkPrinters || state.networkPrinters.length === 0) {
+        loadNetworkPrinters();
+      }
     }
   };
 
@@ -907,6 +1215,26 @@ function bindEvents() {
     const btn = ev.target.closest("[data-tab]");
     if (!btn) return;
     switchTab(btn.dataset.tab);
+  });
+
+  $("#printer-subtabs")?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("[data-subtab]");
+    if (!btn) return;
+    const subtab = btn.dataset.subtab;
+    document.querySelectorAll("#printer-subtabs button").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    const osView = $("#printer-os-view");
+    const bonjourView = $("#printer-bonjour-view");
+    if (subtab === "printer-os") {
+      if (osView) osView.style.display = "flex";
+      if (bonjourView) bonjourView.style.display = "none";
+    } else if (subtab === "printer-bonjour") {
+      if (osView) osView.style.display = "none";
+      if (bonjourView) bonjourView.style.display = "flex";
+      if (!state.networkPrinters || state.networkPrinters.length === 0) {
+        loadNetworkPrinters();
+      }
+    }
   });
 
   document.addEventListener("click", (ev) => {
@@ -978,16 +1306,42 @@ function renderMainShell() {
       </div>
 
       <div class="tab-pane" id="pane-printers">
-        <div class="card">
-          <div class="section-heading">
-            <h2>Daftar Printer Terdeteksi</h2>
-            <button data-action="refresh-printers">Deteksi Ulang</button>
+        <div class="sub-tabs" id="printer-subtabs">
+          <button class="active" data-subtab="printer-os">
+            ${ICONS.printer} Printer OS
+          </button>
+          <button data-subtab="printer-bonjour">
+            ${ICONS.search} Printer Bonjour
+          </button>
+        </div>
+
+        <div class="printer-subview" id="printer-os-view">
+          <div class="card">
+            <div class="section-heading">
+              <h2>Daftar Printer Antrean OS (Ready)</h2>
+              <button data-action="refresh-printers">${ICONS.search} Deteksi Ulang</button>
+            </div>
+            <p class="muted">Antrean printer yang terpasang pada PC ini dan berstatus <b>Ready</b> (siap digunakan). Printer offline disembunyikan otomatis.</p>
+            <div class="printer-stats" id="printer-stats" style="margin-top:12px"></div>
+            <div class="banner" id="printer-banner" style="margin-top:8px"></div>
+            <div class="printer-grid" id="printer-list" style="margin-top:12px">
+              <p class="muted">Mendeteksi printer terpasang di OS…</p>
+            </div>
           </div>
-          <p class="muted">Antrean printer yang terpasang pada PC ini (USB, Serial, Wi-Fi, dan antrean OS). Printer berstatus <b>Ready</b> dapat langsung digunakan dan dipilih oleh aplikasi web dari LAN.</p>
-          <div class="printer-stats" id="printer-stats" style="margin-top:12px"></div>
-          <div class="banner" id="printer-banner" style="margin-top:8px"></div>
-          <div class="printer-grid" id="printer-list" style="margin-top:12px">
-            <p class="muted">Mendeteksi printer terpasang di OS…</p>
+        </div>
+
+        <div class="printer-subview" id="printer-bonjour-view" style="display:none">
+          <div class="card">
+            <div class="section-heading">
+              <h2>Pencarian Jaringan (Bonjour / mDNS & Active LAN)</h2>
+              <button data-action="refresh-network-printers" class="secondary">${ICONS.search} Pindai Jaringan</button>
+            </div>
+            <p class="muted">Seluruh printer jaringan (IPP, IPPS, dan RAW Port 9100) yang terdeteksi di subnet Wi-Fi/LAN lokal. Printer ini dapat langsung diuji cetak, dipasang ke sistem operasi, atau disalin URI-nya untuk RSISA Farmasi.</p>
+            <div class="printer-stats" id="network-printer-stats" style="margin-top:12px"></div>
+            <div class="banner" id="network-printer-banner" style="margin-top:8px"></div>
+            <div class="printer-grid" id="network-printer-list" style="margin-top:12px">
+              <p class="muted">Memindai printer di jaringan via Bonjour/mDNS & Active LAN…</p>
+            </div>
           </div>
         </div>
       </div>
@@ -1036,7 +1390,7 @@ function renderMainShell() {
             <input id="listen-port" placeholder="17891" inputmode="numeric" style="width:110px" aria-label="Port" />
             <button class="primary" data-action="save-listen">Simpan</button>
           </div>
-          <p class="muted" style="margin-top:8px">Gunakan 127.0.0.1 untuk akses dari PC ini saja, atau 0.0.0.0 / IP LAN PC (contoh: 192.168.1.141) agar dapat diakses terpusat oleh PC lain di jaringan LAN. Layanan otomatis dimuat ulang bila sedang berjalan.</p>
+          <p class="muted" style="margin-top:8px">Port harus tetap <code>17891</code> agar aplikasi farmasi dapat terhubung. Gunakan <code>127.0.0.1</code> untuk akses dari PC ini saja, atau <code>0.0.0.0</code> / IP LAN PC (contoh: <code>192.168.1.141</code>) agar dapat diakses oleh PC lain di jaringan LAN dengan mengatur token LAN pada konfigurasi. Layanan otomatis dimuat ulang bila sedang berjalan.</p>
           <div class="banner" id="settings-banner" style="margin-top:10px"></div>
         </div>
         <div class="card">
@@ -1209,6 +1563,7 @@ async function init() {
     }
     // Muat printer di latar belakang.
     await loadPrinters();
+    loadNetworkPrinters();
     renderSettings();
   } else {
     GetPrinterCount()

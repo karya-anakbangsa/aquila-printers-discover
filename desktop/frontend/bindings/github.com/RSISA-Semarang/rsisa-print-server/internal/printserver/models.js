@@ -6,6 +6,87 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
+export class DiscoveredPrinter {
+    /**
+     * Creates a new DiscoveredPrinter instance.
+     * @param {Partial<DiscoveredPrinter>} [$$source = {}] - The source object to create the DiscoveredPrinter.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["model"] = undefined;
+        }
+        if (!("host" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["host"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["ip"] = undefined;
+        }
+        if (!("port" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["port"] = 0;
+        }
+        if (!("uri" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["uri"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["pdl"] = undefined;
+        }
+        if (!("state" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DiscoveredPrinter instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {DiscoveredPrinter}
+     */
+    static createFrom($$source = {}) {
+        const $$createField6_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("pdl" in $$parsedSource) {
+            $$parsedSource["pdl"] = $$createField6_0($$parsedSource["pdl"]);
+        }
+        return new DiscoveredPrinter(/** @type {Partial<DiscoveredPrinter>} */($$parsedSource));
+    }
+}
+
 export class LocalPrinter {
     /**
      * Creates a new LocalPrinter instance.
@@ -32,6 +113,20 @@ export class LocalPrinter {
              * @type {boolean}
              */
             this["is_default"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["owner_pc"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["owner_ip"] = undefined;
         }
         if (/** @type {any} */(false)) {
             /**
@@ -154,3 +249,6 @@ export class OriginInfo {
         return new OriginInfo(/** @type {Partial<OriginInfo>} */($$parsedSource));
     }
 }
+
+// Private type creation functions
+const $$createType0 = $Create.Array($Create.Any);

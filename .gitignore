@@ -1,5 +1,7 @@
 /dist/
 /output/
+/bin/
+desktop/bin/
 /print-server.json
 /rsisa-print-server
 /rsisa-print-server.exe
@@ -7,3 +9,4 @@
 /RANGKUMAN_PERBAIKAN.md
 CARA_BUILD_WINDOWS.md
 *.local.md
+

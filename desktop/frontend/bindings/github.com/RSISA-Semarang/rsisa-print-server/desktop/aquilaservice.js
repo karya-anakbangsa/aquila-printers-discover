@@ -68,6 +68,16 @@ export function DiagnosePort() {
 }
 
 /**
+ * DiscoverNetworkPrinters mencari printer jaringan via Bonjour/mDNS (IPP/IPPS).
+ * @returns {$CancellablePromise<printserver$0.DiscoveredPrinter[]>}
+ */
+export function DiscoverNetworkPrinters() {
+    return $Call.ByID(1937954516).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType2($result);
+    }));
+}
+
+/**
  * ExportConfig membuka dialog simpan lalu menyalin konfigurasi ke sana.
  * @returns {$CancellablePromise<void>}
  */
@@ -89,7 +99,7 @@ export function GetAutostart() {
  */
 export function GetConfig() {
     return $Call.ByID(3819158040).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType1($result);
+        return $$createType3($result);
     }));
 }
 
@@ -99,7 +109,7 @@ export function GetConfig() {
  */
 export function GetLogs() {
     return $Call.ByID(248787509).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType3($result);
+        return $$createType5($result);
     }));
 }
 
@@ -109,7 +119,7 @@ export function GetLogs() {
  */
 export function GetOrigins() {
     return $Call.ByID(2000465585).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType7($result);
     }));
 }
 
@@ -127,7 +137,7 @@ export function GetPrinterCount() {
  */
 export function GetPrinterPorts() {
     return $Call.ByID(605231434).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType6($result);
+        return $$createType8($result);
     }));
 }
 
@@ -137,7 +147,7 @@ export function GetPrinterPorts() {
  */
 export function GetPrinters() {
     return $Call.ByID(3218359859).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType8($result);
+        return $$createType10($result);
     }));
 }
 
@@ -147,7 +157,7 @@ export function GetPrinters() {
  */
 export function GetSettings() {
     return $Call.ByID(293930939).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType9($result);
+        return $$createType11($result);
     }));
 }
 
@@ -157,7 +167,7 @@ export function GetSettings() {
  */
 export function GetState() {
     return $Call.ByID(2333843955).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType10($result);
+        return $$createType12($result);
     }));
 }
 
@@ -175,6 +185,17 @@ export function HidePopup() {
  */
 export function ImportConfig() {
     return $Call.ByID(2202893165);
+}
+
+/**
+ * InstallNetworkPrinter mendaftarkan printer jaringan (IPP) ke antrean sistem operasi (OS) komputer ini.
+ * @param {string} name
+ * @param {string} uri
+ * @param {string} model
+ * @returns {$CancellablePromise<void>}
+ */
+export function InstallNetworkPrinter(name, uri, model) {
+    return $Call.ByID(1677420427, name, uri, model);
 }
 
 /**
@@ -208,6 +229,15 @@ export function QuitApp() {
  */
 export function ReloadConfig() {
     return $Call.ByID(3511669253);
+}
+
+/**
+ * RemoveNetworkPrinter menghapus printer jaringan dari antrean sistem operasi (OS) komputer ini.
+ * @param {string} name
+ * @returns {$CancellablePromise<void>}
+ */
+export function RemoveNetworkPrinter(name) {
+    return $Call.ByID(2072493200, name);
 }
 
 /**
@@ -305,7 +335,7 @@ export function StopService() {
  */
 export function TestConnection() {
     return $Call.ByID(2165223494).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType11($result);
+        return $$createType13($result);
     }));
 }
 
@@ -351,14 +381,16 @@ export function UpdateOrigin(index, scheme, host, port) {
 
 // Private type creation functions
 const $$createType0 = $models.PortOwnerResult.createFrom;
-const $$createType1 = $models.ConfigView.createFrom;
-const $$createType2 = $models.LogEntry.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = printserver$0.OriginInfo.createFrom;
+const $$createType1 = printserver$0.DiscoveredPrinter.createFrom;
+const $$createType2 = $Create.Array($$createType1);
+const $$createType3 = $models.ConfigView.createFrom;
+const $$createType4 = $models.LogEntry.createFrom;
 const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = $Create.Array($Create.Any);
-const $$createType7 = printserver$0.LocalPrinter.createFrom;
-const $$createType8 = $Create.Array($$createType7);
-const $$createType9 = $models.AppSettings.createFrom;
-const $$createType10 = $models.ServiceState.createFrom;
-const $$createType11 = $models.HealthResult.createFrom;
+const $$createType6 = printserver$0.OriginInfo.createFrom;
+const $$createType7 = $Create.Array($$createType6);
+const $$createType8 = $Create.Array($Create.Any);
+const $$createType9 = printserver$0.LocalPrinter.createFrom;
+const $$createType10 = $Create.Array($$createType9);
+const $$createType11 = $models.AppSettings.createFrom;
+const $$createType12 = $models.ServiceState.createFrom;
+const $$createType13 = $models.HealthResult.createFrom;

@@ -68,6 +68,21 @@ button.danger:hover:not(:disabled) {
   background: #fef2f2;
 }
 
+button.warning,
+button.secondary.warning {
+  background: #eab308;
+  border-color: #ca8a04;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+button.warning:hover:not(:disabled),
+button.secondary.warning:hover:not(:disabled) {
+  background: #facc15;
+  border-color: #eab308;
+  color: #0f172a;
+}
+
 input,
 select {
   font: inherit;
@@ -199,6 +214,48 @@ select:focus {
 
 .tab-pane.active {
   display: flex;
+}
+
+.sub-tabs {
+  display: inline-flex;
+  gap: 6px;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  width: fit-content;
+}
+
+.sub-tabs button {
+  border: none;
+  background: transparent;
+  padding: 8px 18px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--muted);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.sub-tabs button:hover:not(.active) {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text);
+}
+
+.sub-tabs button.active {
+  background: #ffffff;
+  color: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.printer-subview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .card {
@@ -715,4 +772,23 @@ select:focus {
 .printer-actions button {
   padding: 5px 11px;
   font-size: 0.8rem;
+}
+
+
+/* SVG Icon styling for buttons */
+.btn-icon {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }

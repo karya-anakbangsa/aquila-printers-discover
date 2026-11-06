@@ -133,9 +133,9 @@ git remote add origin git@github.com:RSISA-Semarang/rsisa-printer-server.git
 git branch -M main
 git push -u origin main
 
-# 4. Buat dan dorong tag versi (contoh: v1.0.9)
-git tag v1.0.9
-git push origin v1.0.9
+# 4. Buat dan dorong tag versi (contoh: v1.0.10)
+git tag v1.0.10
+git push origin v1.0.10
 
 # 5. Tunggu Actions selesai → halaman Releases otomatis terisi semua installer
 ```
@@ -213,6 +213,10 @@ Untuk auto-start, buat file `~/Library/LaunchAgents/id.rsisa.print-server.plist`
 ```
 
 Muat dengan `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/id.rsisa.print-server.plist`.
+
+Untuk berbagi antrean PC2 ke PC1 melalui LAN, pasang print server pada kedua PC dan isi  yang sama pada  keduanya. Gunakan token acak yang unik untuk jaringan tersebut, minimal 24 karakter. Di PC2 atur  menjadi ; PC1 tetap . Restart layanan setelah mengubah JSON. Batasi firewall PC2 ke jaringan internal tepercaya.
+
+Di Farmasi, buka pengaturan printer, masukkan IP PC2 pada **Printer pada PC lain**, cari, pilih antrean, dan daftarkan.
 
 ## API
 

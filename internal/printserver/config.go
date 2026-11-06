@@ -38,6 +38,8 @@ type LocalPrinter struct {
 	Name           string `json:"name"`
 	State          string `json:"state"`
 	IsDefault      bool   `json:"is_default"`
+	OwnerPC        string `json:"owner_pc,omitempty"`
+	OwnerIP        string `json:"owner_ip,omitempty"`
 	Driver         string `json:"driver,omitempty"`
 	Port           string `json:"port,omitempty"`
 	IP             string `json:"ip,omitempty"`
@@ -90,10 +92,11 @@ func DetermineConnectionType(port, driver, ip string) string {
 }
 
 type Config struct {
-	Listen        string          `json:"listen"`
-	AllowedOrigin []string        `json:"allowed_origins"`
-	Printers      []PrinterConfig `json:"printers,omitempty"`
-	Routes        []RouteConfig   `json:"routes,omitempty"`
+	Listen         string          `json:"listen"`
+	LANAccessToken string          `json:"lan_access_token,omitempty"`
+	AllowedOrigin  []string        `json:"allowed_origins"`
+	Printers       []PrinterConfig `json:"printers,omitempty"`
+	Routes         []RouteConfig   `json:"routes,omitempty"`
 }
 
 // DefaultConfig mengembalikan konfigurasi bawaan yang ditulis aplikasi desktop
@@ -127,20 +130,20 @@ func (cfg *Config) Validate() error {
 		cfg.Listen = DefaultListen
 	}
 	host, port, err := net.SplitHostPort(cfg.Listen)
-	if err != nil {
-		return fmt.Errorf("alamat listen tidak valid (%s): %w", cfg.Listen, err)
+	if err != nil || port == "" {
+		return errors.New("alamat listen harus berisi host dan port yang valid")
 	}
-	portNum, err := strconv.Atoi(port)
-	if err != nil || portNum < 1 || portNum > 65535 {
+	portNumber, err := strconv.Atoi(port)
+	if err != nil || portNumber < 1 || portNumber > 65535 {
 		return errors.New("port listen harus antara 1 dan 65535")
 	}
-	if host != "localhost" {
+	if host != "localhost" && host != "127.0.0.1" {
 		ip := net.ParseIP(strings.Trim(host, "[]"))
-		if ip == nil {
-			return fmt.Errorf("host listen %q bukan IP atau localhost yang valid", host)
+		if ip == nil || ip.To4() == nil || (!ip.IsPrivate() && !ip.IsUnspecified()) {
+			return errors.New("alamat LAN harus berupa IP private komputer ini atau 0.0.0.0")
 		}
-		if !(ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified()) {
-			return errors.New("print server hanya boleh listen di localhost, 0.0.0.0, atau IP privat LAN untuk mencegah akses dari internet publik")
+		if len(cfg.LANAccessToken) > 0 && (len(cfg.LANAccessToken) < 24 || strings.TrimSpace(cfg.LANAccessToken) != cfg.LANAccessToken) {
+			return errors.New("akses LAN memerlukan lan_access_token minimal 24 karakter")
 		}
 	}
 	printerNames := make(map[string]string, len(cfg.Printers))
@@ -215,7 +218,7 @@ func SaveConfig(path string, cfg Config) error {
 	if err := temp.Close(); err != nil {
 		return fmt.Errorf("tutup konfigurasi sementara: %w", err)
 	}
-	if err := os.Chmod(tempPath, 0o644); err != nil {
+	if err := os.Chmod(tempPath, 0o600); err != nil {
 		return fmt.Errorf("atur izin konfigurasi: %w", err)
 	}
 	if err := os.Rename(tempPath, path); err != nil {
