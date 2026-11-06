@@ -575,6 +575,17 @@ func TestPrinterFromDesktop(ctx context.Context, name, uri, mode string) error {
 			}
 			return utils.PrintRawToSerialPort(port, rawData)
 		}
+		if utils.IsTCPPrinter(uri) {
+			u, err := url.Parse(uri)
+			if err == nil {
+				conn, dialErr := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "tcp", u.Host)
+				if dialErr == nil {
+					defer conn.Close()
+					_, writeErr := conn.Write(rawData)
+					return writeErr
+				}
+			}
+		}
 		return utils.PrintRawToWindowsPrinter(name, rawData, "Tes Printer USB")
 	}
 
@@ -585,13 +596,29 @@ func TestPrinterFromDesktop(ctx context.Context, name, uri, mode string) error {
 	if opts.Mode == "" {
 		opts.Mode = "bw"
 	}
+
+	// 1. Jika terpasang di Windows sebagai antrean aktif, prioritaskan cetak melalui antrean OS.
+	// Ini menjamin printer yang membutuhkan driver raster spesifik (seperti Epson ESC/P-R)
+	// dicetak dengan raster format yang benar dan stabil.
+	if runtime.GOOS == "windows" && name != "" {
+		if err := sendWindowsQualityTest(ctx, name, opts); err == nil {
+			return nil
+		}
+	}
+
+	// 2. Jika ada URI jaringan (IPP / IPPS / TCP)
 	if uri != "" {
 		if _, qErr := utils.WindowsQueueName(uri); qErr != nil {
-			// Printer IPP jaringan Wi-Fi
 			pdf, err := utils.GeneratePrinterTestPDF(name, opts)
 			if err != nil {
 				return err
 			}
+
+			if utils.IsTCPPrinter(uri) {
+				return utils.PrintTCPDocument(ctx, uri, pdf, 1, "")
+			}
+
+			// Printer IPP jaringan Wi-Fi
 			_, err = utils.PrintIPPDocument(ctx, uri, pdf, "Tes Printer", "RSISA Printer Server", 1, "")
 			return err
 		}

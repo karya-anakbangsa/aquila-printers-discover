@@ -106,6 +106,13 @@ func discoverIPPPrinters(ctx context.Context) ([]discoveredPrinter, error) {
 				if len(existing.PDL) == 0 && len(p.PDL) > 0 {
 					existing.PDL = p.PDL
 				}
+				// Jangan biarkan socket port 9100 menimpa mDNS IPP port 631
+				if (existing.Port == 631 || strings.HasPrefix(existing.URI, "ipp")) && (p.Port == 9100 || strings.HasPrefix(p.URI, "socket")) {
+					// tetap pertahankan existing IPP
+				} else if p.Port == 631 && existing.Port == 9100 {
+					existing.Port = 631
+					existing.URI = p.URI
+				}
 				merged[k] = existing
 			}
 		}
@@ -279,29 +286,47 @@ func discoverMDNSPrinters(ctx context.Context) (map[string]discoveredPrinter, er
 			resource = "/" + strings.TrimLeft(resource, "/")
 		}
 
+		endpointHost := host
+		var ipAddr string
+		if len(service.Addresses) > 0 {
+			ipAddr = service.Addresses[0].String()
+			endpointHost = ipAddr
+		}
+
 		var uri string
 		if scheme == "socket" {
-			uri = fmt.Sprintf("socket://%s:%d", host, service.Port)
+			uri = fmt.Sprintf("socket://%s:%d", endpointHost, service.Port)
 		} else {
-			uri = fmt.Sprintf("%s://%s:%d%s", scheme, host, service.Port, resource)
+			uri = fmt.Sprintf("%s://%s:%d%s", scheme, endpointHost, service.Port, resource)
 		}
 
 		printer := discoveredPrinter{
 			Name:  service.Name,
 			Model: service.Text["ty"],
 			Host:  host,
+			IP:    ipAddr,
 			Port:  service.Port,
 			URI:   uri,
 			State: "ready",
 			PDL:   splitTXTValues(service.Text["pdl"]),
 		}
-		if len(service.Addresses) > 0 {
-			printer.IP = service.Addresses[0].String()
-		}
 
 		key := strings.ToLower(host)
 		if printer.IP != "" {
 			key = printer.IP
+		}
+		if existing, exists := printersByEndpoint[key]; exists {
+			// Prioritaskan IPP / IPPS (port 631) di atas socket RAW (port 9100)
+			if (existing.Port == 631 || strings.HasPrefix(existing.URI, "ipp")) && (printer.Port == 9100 || strings.HasPrefix(printer.URI, "socket")) {
+				if existing.Model == "" && printer.Model != "" {
+					existing.Model = printer.Model
+				}
+				if len(existing.PDL) == 0 && len(printer.PDL) > 0 {
+					existing.PDL = printer.PDL
+				}
+				printersByEndpoint[key] = existing
+				continue
+			}
 		}
 		printersByEndpoint[key] = printer
 	}

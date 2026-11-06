@@ -891,10 +891,11 @@ function bindEvents() {
         btn.innerHTML = `${ICONS.printer} Mengirim…`;
         hideBanner("#network-printer-banner");
         try {
-          await TestPrinter(p.name, p.uri, "bw");
+          const testMode = (p.port === 9100 || (p.uri && p.uri.startsWith("socket://"))) ? "raw" : "bw";
+          await TestPrinter(p.name, p.uri, testMode);
           showBanner(
             "#network-printer-banner",
-            `Uji cetak berhasil dikirim langsung via IPP ke "${p.name}" (${p.uri}). Silakan periksa hasil cetakan printer fisik.`,
+            `Uji cetak berhasil dikirim ke "${p.name}". Silakan periksa hasil cetakan printer fisik.`,
             true
           );
         } catch (err) {

@@ -102,32 +102,118 @@ func installCUPSPrinter(ctx context.Context, name, uri, model string) error {
 	return nil
 }
 
-// installWindowsNetworkPrinter menggunakan PowerShell Add-Printer untuk mendaftarkan antrean printer di Windows.
+// installWindowsNetworkPrinter menggunakan PowerShell untuk mendaftarkan antrean printer di Windows.
 func installWindowsNetworkPrinter(ctx context.Context, name, uri, model string) error {
 	script := fmt.Sprintf(`
 $ErrorActionPreference = 'Stop'
 $printerName = %q
 $deviceUrl = %q
-if ($deviceUrl -like "socket://*" -or $deviceUrl -like "tcp://*") {
-    $clean = $deviceUrl -replace "^[a-z]+://", ""
-    $parts = $clean -split ":"
-    $hostAddr = $parts[0]
-    $portNum = 9100
-    if ($parts.Length -gt 1) { [int]::TryParse($parts[1], [ref]$portNum) }
-    $portName = "IP_" + $hostAddr
-    if (!(Get-PrinterPort -Name $portName -ErrorAction SilentlyContinue)) {
-        Add-PrinterPort -Name $portName -PrinterHostAddress $hostAddr -PortNumber $portNum -ErrorAction SilentlyContinue
+$model = %q
+
+# 1. Parse Host dan Port dari deviceUrl
+$raw = $deviceUrl -replace "^[a-z]+://", ""
+$hostAndPort = ($raw -split "/")[0]
+$parts = $hostAndPort -split ":"
+$hostAddr = $parts[0]
+$portNum = 9100
+if ($parts.Length -gt 1) { 
+    [int]::TryParse($parts[1], [ref]$portNum) 
+}
+
+# Resolve hostname jika bukan IP
+try {
+    $ipObj = [System.Net.IPAddress]::None
+    if (![System.Net.IPAddress]::TryParse($hostAddr, [ref]$ipObj)) {
+        $resolved = [System.Net.Dns]::GetHostAddresses($hostAddr)
+        if ($resolved -and $resolved.Count -gt 0) {
+            $hostAddr = $resolved[0].IPAddressToString
+        }
     }
-    if (!(Get-Printer -Name $printerName -ErrorAction SilentlyContinue)) {
-        # Coba pasang dengan Generic / Text Only
-        Add-Printer -Name $printerName -PortName $portName -DriverName "Generic / Text Only" -ErrorAction SilentlyContinue
+} catch {}
+
+# 2. Cek apakah port 9100 terbuka (standar RAW print port untuk Windows TCP/IP)
+try {
+    $tcp = New-Object System.Net.Sockets.TcpClient
+    $async = $tcp.BeginConnect($hostAddr, 9100, $null, $null)
+    $ok = $async.AsyncWaitHandle.WaitOne(400, $false)
+    if ($ok -and $tcp.Connected) {
+        $portNum = 9100
+        $tcp.EndConnect($async)
     }
-} else {
-    if (!(Get-Printer -Name $printerName -ErrorAction SilentlyContinue)) {
-        Add-Printer -Name $printerName -DeviceURL $deviceUrl -ErrorAction Stop
+    $tcp.Close()
+} catch {}
+
+# 3. Cari driver terbaik yang sudah terpasang di Windows
+$installed = Get-PrinterDriver | Select-Object -ExpandProperty Name
+$chosenDriver = $null
+
+if ($model) {
+    foreach ($drv in $installed) {
+        if ($drv -like "*$model*" -or $model -like "*$drv*") {
+            $chosenDriver = $drv
+            break
+        }
     }
 }
-`, name, uri)
+if (!$chosenDriver) {
+    foreach ($drv in $installed) {
+        if ($drv -like "*$printerName*" -or $printerName -like "*$drv*") {
+            $chosenDriver = $drv
+            break
+        }
+    }
+}
+if (!$chosenDriver) {
+    $lower = ($printerName + " " + $model).ToLower()
+    if ($lower -like "*epson*") {
+        $chosenDriver = $installed | Where-Object { $_ -like "Epson ESC/P-R*" -or $_ -like "Epson ESC/P*" } | Select-Object -First 1
+    } elseif ($lower -like "*brother*") {
+        $chosenDriver = $installed | Where-Object { $_ -like "Brother*" } | Select-Object -First 1
+    } elseif ($lower -like "*canon*") {
+        $chosenDriver = $installed | Where-Object { $_ -like "Canon*" } | Select-Object -First 1
+    } elseif ($lower -like "*hp*" -or $lower -like "*hewlett*") {
+        $chosenDriver = $installed | Where-Object { $_ -like "HP*" } | Select-Object -First 1
+    }
+}
+if (!$chosenDriver -and ($installed -contains "Microsoft IPP Class Driver")) {
+    $chosenDriver = "Microsoft IPP Class Driver"
+}
+if (!$chosenDriver) {
+    $chosenDriver = $installed | Where-Object { $_ -like "*Universal Print*" } | Select-Object -First 1
+}
+if (!$chosenDriver -and ($installed -contains "Generic / Text Only")) {
+    $chosenDriver = "Generic / Text Only"
+}
+if (!$chosenDriver -and $installed.Count -gt 0) {
+    $chosenDriver = $installed[0]
+}
+
+if (!$chosenDriver) {
+    throw "Tidak ditemukan driver printer yang kompatibel di Windows."
+}
+
+# 4. Buat TCP/IP Port & Pasang Printer
+$portName = "IP_" + $hostAddr
+if ($portNum -ne 9100) {
+    $portName = "IP_" + $hostAddr + "_" + $portNum
+}
+
+if (!(Get-PrinterPort -Name $portName -ErrorAction SilentlyContinue)) {
+    Add-PrinterPort -Name $portName -PrinterHostAddress $hostAddr -PortNumber $portNum -ErrorAction Stop
+}
+
+if (!(Get-Printer -Name $printerName -ErrorAction SilentlyContinue)) {
+    try {
+        Add-Printer -Name $printerName -PortName $portName -DriverName $chosenDriver -ErrorAction Stop
+    } catch {
+        if ($chosenDriver -ne "Microsoft IPP Class Driver" -and ($installed -contains "Microsoft IPP Class Driver")) {
+            Add-Printer -Name $printerName -PortName $portName -DriverName "Microsoft IPP Class Driver" -ErrorAction Stop
+        } else {
+            throw $_
+        }
+    }
+}
+`, name, uri, model)
 
 	output, err := hiddenWindowsCommand(ctx, script).CombinedOutput()
 	if err != nil {
