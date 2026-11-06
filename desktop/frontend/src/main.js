@@ -489,9 +489,6 @@ function renderNetworkPrinters(error = null) {
                     ${ICONS.plus} Pasang ke Komputer Ini
                   </button>`
             }
-            <button class="primary" data-action="test-network-printer" data-index="${idx}">
-              ${ICONS.printer} Tes Cetak Langsung (${p.port === 9100 ? "RAW" : "IPP"})
-            </button>
             <button data-action="copy-printer-uri" data-index="${idx}" title="Salin URI printer untuk didaftarkan ke aplikasi RSISA Farmasi">
               ${ICONS.copy} Salin Alamat URI
             </button>
