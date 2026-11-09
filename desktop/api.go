@@ -70,6 +70,16 @@ func (s *AquilaService) RemoveOrigin(index int) error { return s.core.RemoveOrig
 // GetConfig mengembalikan ringkasan konfigurasi print-server.json.
 func (s *AquilaService) GetConfig() ConfigView { return s.core.ConfigView() }
 
+// SetCloudAgent mengubah konfigurasi Cloud Agent Relay ke website pusat.
+func (s *AquilaService) SetCloudAgent(enabled bool, serverURL string, pollInterval int, restart bool) error {
+	return s.core.SetCloudAgent(enabled, serverURL, pollInterval, restart)
+}
+
+// RegisterPrintersToCloud mendaftarkan seluruh printer lokal ke website pusat.
+func (s *AquilaService) RegisterPrintersToCloud() (int, error) {
+	return s.core.RegisterLocalPrintersToCloud()
+}
+
 // SetListen mengubah alamat dengarkan; bila restart true, layanan dimatikan
 // lalu dijalankan ulang agar perubahan berlaku.
 func (s *AquilaService) SetListen(host string, port int, restart bool) error {

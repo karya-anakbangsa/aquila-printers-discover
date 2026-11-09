@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
@@ -39,14 +42,19 @@ func DefaultSettings() AppSettings {
 
 // ConfigView adalah ringkasan konfigurasi untuk ditampilkan di UI.
 type ConfigView struct {
-	Path       string                   `json:"path"`
-	Listen     string                   `json:"listen"`
-	ListenHost string                   `json:"listen_host"`
-	ListenPort int                      `json:"listen_port"`
-	Origins    []printserver.OriginInfo `json:"origins"`
-	JSON       string                   `json:"json"`
-	Created    bool                     `json:"created"`
-	Version    string                   `json:"version"`
+	Path              string                   `json:"path"`
+	Listen            string                   `json:"listen"`
+	ListenHost        string                   `json:"listen_host"`
+	ListenPort        int                      `json:"listen_port"`
+	Origins           []printserver.OriginInfo `json:"origins"`
+	CloudAgentEnabled bool                     `json:"cloud_agent_enabled"`
+	CloudServerURL    string                   `json:"cloud_server_url"`
+	CloudAgentID      string                   `json:"cloud_agent_id"`
+	CloudAgentToken   string                   `json:"cloud_agent_token"`
+	CloudPollInterval int                      `json:"cloud_poll_interval_sec"`
+	JSON              string                   `json:"json"`
+	Created           bool                     `json:"created"`
+	Version           string                   `json:"version"`
 }
 
 // Core menyatukan konfigurasi, layanan, dan log aplikasi desktop.
@@ -303,15 +311,165 @@ func (c *Core) ConfigView() ConfigView {
 	created := c.created
 	c.mu.RUnlock()
 	return ConfigView{
-		Path:       c.paths.PrintServer,
-		Listen:     cfg.Listen,
-		ListenHost: host,
-		ListenPort: port,
-		Origins:    c.Origins(),
-		JSON:       jsonText,
-		Created:    created,
-		Version:    appVersion,
+		Path:              c.paths.PrintServer,
+		Listen:            cfg.Listen,
+		ListenHost:        host,
+		ListenPort:        port,
+		Origins:           c.Origins(),
+		CloudAgentEnabled: cfg.CloudAgentEnabled,
+		CloudServerURL:    cfg.CloudServerURL,
+		CloudAgentID:      cfg.CloudAgentID,
+		CloudAgentToken:   cfg.CloudAgentToken,
+		CloudPollInterval: cfg.CloudPollInterval,
+		JSON:              jsonText,
+		Created:           created,
+		Version:           appVersion,
 	}
+}
+
+// SetCloudAgent mengubah konfigurasi Cloud Agent Relay; bila restart true,
+// layanan dimatikan lalu dijalankan ulang agar koneksi baru terbentuk.
+func (c *Core) SetCloudAgent(enabled bool, serverURL string, pollInterval int, restart bool) error {
+	serverURL = strings.TrimSpace(serverURL)
+	if pollInterval <= 0 {
+		pollInterval = 2
+	}
+
+	c.mu.Lock()
+	prevEnabled := c.cfg.CloudAgentEnabled
+	prevURL := c.cfg.CloudServerURL
+	prevInterval := c.cfg.CloudPollInterval
+
+	c.cfg.CloudAgentEnabled = enabled
+	c.cfg.CloudServerURL = serverURL
+	c.cfg.CloudPollInterval = pollInterval
+
+	cfg, err := c.commitLocked()
+	if err != nil {
+		c.cfg.CloudAgentEnabled = prevEnabled
+		c.cfg.CloudServerURL = prevURL
+		c.cfg.CloudPollInterval = prevInterval
+		c.mu.Unlock()
+		return err
+	}
+	c.mu.Unlock()
+	c.applyToService(cfg)
+	c.log("INFO", fmt.Sprintf("Cloud Agent diubah: aktif=%v, server=%s, interval=%ds", enabled, serverURL, pollInterval))
+	if restart {
+		return c.RestartService()
+	}
+	return nil
+}
+
+// RegisterLocalPrintersToCloud mendaftarkan seluruh printer lokal ke website pusat.
+func (c *Core) RegisterLocalPrintersToCloud() (int, error) {
+	cfg := c.currentConfig()
+	serverURL := strings.TrimRight(strings.TrimSpace(cfg.CloudServerURL), "/")
+	if serverURL == "" {
+		return 0, fmt.Errorf("URL Server Web belum dikonfigurasi")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	agentID := cfg.CloudAgentID
+	token := cfg.CloudAgentToken
+
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname = "PC-A"
+	}
+
+	// Pastikan Agent terdaftar
+	if agentID == "" || token == "" {
+		regBody, _ := json.Marshal(map[string]string{
+			"name":         fmt.Sprintf("PC A (%s)", hostname),
+			"machine_name": hostname,
+		})
+		for _, regURL := range []string{
+			fmt.Sprintf("%s/sys/printing/agent/register", serverURL),
+			fmt.Sprintf("%s/api/sys/printing/agent/register", serverURL),
+			fmt.Sprintf("%s/agent/printing/register", serverURL),
+		} {
+			req, err := http.NewRequestWithContext(ctx, "POST", regURL, bytes.NewReader(regBody))
+			if err != nil {
+				continue
+			}
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := client.Do(req)
+			if err != nil {
+				continue
+			}
+			body, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+				var res struct {
+					AgentID  string `json:"agent_id"`
+					APIToken string `json:"api_token"`
+				}
+				if err := json.Unmarshal(body, &res); err == nil && res.AgentID != "" {
+					agentID = res.AgentID
+					token = res.APIToken
+					c.mu.Lock()
+					c.cfg.CloudAgentID = agentID
+					c.cfg.CloudAgentToken = token
+					_, _ = c.commitLocked()
+					c.mu.Unlock()
+					break
+				}
+			}
+		}
+	}
+
+	printers, err := c.Printers()
+	if err != nil {
+		return 0, fmt.Errorf("gagal mendeteksi printer lokal: %w", err)
+	}
+
+	printerItems := make([]map[string]string, 0, len(printers))
+	for _, p := range printers {
+		printerItems = append(printerItems, map[string]string{
+			"name":       p.Name,
+			"queue_name": p.Name,
+		})
+	}
+
+	bodyBytes, _ := json.Marshal(map[string]any{
+		"machine_name": hostname,
+		"printers":     printerItems,
+	})
+
+	urls := []string{
+		fmt.Sprintf("%s/sys/printing/agent/printers", serverURL),
+		fmt.Sprintf("%s/api/sys/printing/agent/printers", serverURL),
+		fmt.Sprintf("%s/agent/printing/printers", serverURL),
+	}
+
+	for _, syncURL := range urls {
+		req, err := http.NewRequestWithContext(ctx, "POST", syncURL, bytes.NewReader(bodyBytes))
+		if err != nil {
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if agentID != "" {
+			req.Header.Set("X-Printer-Agent-ID", agentID)
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+			c.log("INFO", fmt.Sprintf("%d printer berhasil disinkronkan ke website SIMRS", len(printerItems)))
+			return len(printerItems), nil
+		}
+	}
+
+	return len(printerItems), nil
 }
 
 // ResetConfig mengembalikan konfigurasi ke nilai bawaan.
@@ -552,12 +710,11 @@ func ensureWindowsFirewall(logger func(level, msg string)) {
 	}
 	go func() {
 		checkCmd := exec.Command("netsh", "advfirewall", "firewall", "show", "rule", "name=RSISA Printer Server Port 17891")
-		if err := checkCmd.Run(); err == nil {
-			return
-		}
-		addCmd := exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name=RSISA Printer Server Port 17891", "dir=in", "action=allow", "protocol=TCP", "localport=17891", "profile=any")
-		if err := addCmd.Run(); err == nil {
-			logger("INFO", "Aturan Windows Firewall untuk port 17891 berhasil ditambahkan secara otomatis")
+		if err := checkCmd.Run(); err != nil {
+			addCmd := exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name=RSISA Printer Server Port 17891", "dir=in", "action=allow", "protocol=TCP", "localport=17891", "profile=any")
+			if err := addCmd.Run(); err == nil {
+				logger("INFO", "Aturan Windows Firewall untuk port 17891 berhasil ditambahkan secara otomatis")
+			}
 		}
 	}()
 }

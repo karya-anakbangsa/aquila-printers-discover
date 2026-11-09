@@ -98,14 +98,24 @@ type Config struct {
 	AllowedOrigin  []string        `json:"allowed_origins"`
 	Printers       []PrinterConfig `json:"printers,omitempty"`
 	Routes         []RouteConfig   `json:"routes,omitempty"`
+
+	// Cloud Agent Mode (Centralized Cloud Print Relay)
+	CloudAgentEnabled bool   `json:"cloud_agent_enabled"`
+	CloudServerURL    string `json:"cloud_server_url"` // misal: "http://localhost:8081" atau "https://simrs.klinik.com"
+	CloudAgentID      string `json:"cloud_agent_id,omitempty"`
+	CloudAgentToken   string `json:"cloud_agent_token,omitempty"`
+	CloudPollInterval int    `json:"cloud_poll_interval_sec,omitempty"`
 }
 
 // DefaultConfig mengembalikan konfigurasi bawaan yang ditulis aplikasi desktop
 // ke print-server.json saat pertama kali jalan.
 func DefaultConfig() Config {
 	return Config{
-		Listen:        DefaultListen,
-		AllowedOrigin: append([]string(nil), DefaultOrigins...),
+		Listen:            DefaultListen,
+		AllowedOrigin:     append([]string(nil), DefaultOrigins...),
+		CloudAgentEnabled: true,
+		CloudServerURL:    "http://localhost:8081",
+		CloudPollInterval: 2,
 	}
 }
 

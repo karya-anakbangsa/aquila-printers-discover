@@ -47,3 +47,13 @@ export {
   AquilaLog,
   AquilaState,
 } from "../bindings/events/index.js";
+
+import { Call as $Call } from "@wailsio/runtime";
+
+export function SetCloudAgent(enabled, serverURL, pollInterval, restart) {
+  return $Call.ByName("main.AquilaService.SetCloudAgent", enabled, serverURL, pollInterval, restart);
+}
+
+export function RegisterPrintersToCloud() {
+  return $Call.ByName("main.AquilaService.RegisterPrintersToCloud");
+}

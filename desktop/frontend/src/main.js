@@ -39,6 +39,8 @@ import {
   ToggleService,
   UninstallApp,
   UpdateOrigin,
+  SetCloudAgent,
+  RegisterPrintersToCloud,
 } from "./api.js";
 import "./style.css";
 
@@ -57,6 +59,7 @@ const ICONS = {
   trash: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`,
   plus: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
   check: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+  cloud: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>`,
 };
 
 function normalizePrinterName(val) {
@@ -215,6 +218,16 @@ function renderBeranda() {
     }
   }
   $("#bd-path").textContent = cfg ? cfg.path : "—";
+  const cloudEl = $("#bd-cloud-status");
+  if (cloudEl) {
+    const isCloud = cfg?.cloud_agent_enabled;
+    const cloudURL = cfg?.cloud_server_url || "";
+    if (isCloud && cloudURL) {
+      cloudEl.innerHTML = `<span class="badge badge-ready">Aktif (Relay ke ${esc(cloudURL)})</span>`;
+    } else {
+      cloudEl.innerHTML = `<span class="badge badge-disabled">Nonaktif</span> <button data-tab-goto="cloud" style="margin-left:8px;padding:2px 8px;font-size:0.75rem">Atur</button>`;
+    }
+  }
 }
 
 function loadPrinters(force = false) {
@@ -366,6 +379,9 @@ function renderPrinters(error = null) {
               <div class="printer-actions" style="margin-top:10px">
                 <button class="primary" data-action="test-auto-printer" data-index="${idx}">
                   ${ICONS.printer} Tes Cetak (${isThermal ? 'Struk Thermal' : 'Dokumen'})
+                </button>
+                <button class="secondary" data-action="register-single-cloud-printer" data-printer-name="${esc(p.name)}" title="Daftarkan printer ini ke Website SIMRS agar PC lain bisa langsung mencetak ke sini">
+                  ${ICONS.cloud} Daftarkan ke Web
                 </button>
                 ${
                   !isThermal
@@ -597,10 +613,31 @@ function renderSettings() {
   if (ver && cfg) ver.textContent = cfg.version || "—";
 }
 
+function renderCloudRelay() {
+  const cfg = state.config;
+  if (!$("#cloud-server-url")) return;
+  if (cfg) {
+    const isEnabled = !!cfg.cloud_agent_enabled;
+    $("#cloud-agent-enabled").checked = isEnabled;
+    $("#cloud-server-url").value = cfg.cloud_server_url || "http://localhost:8081";
+    $("#cloud-poll-interval").value = String(cfg.cloud_poll_interval_sec || 2);
+    const badge = $("#cloud-status-badge");
+    if (badge) {
+      if (isEnabled) {
+        const idInfo = cfg.cloud_agent_id ? ` (Agent ID: ${cfg.cloud_agent_id.substring(0, 8)}…)` : "";
+        badge.innerHTML = `<span class="badge badge-ready">🟢 Aktif & Terhubung ke Website${idInfo}</span>`;
+      } else {
+        badge.innerHTML = `<span class="badge badge-disabled">Nonaktif</span>`;
+      }
+    }
+  }
+}
+
 function renderAll() {
   renderStatus();
   renderOrigins();
   renderSettings();
+  renderCloudRelay();
 }
 
 // ------------------------------------------------------------------- banner
@@ -813,6 +850,70 @@ async function doSetAutostart() {
   }
 }
 
+async function doSaveCloudConfig(btn) {
+  const enabled = $("#cloud-agent-enabled")?.checked ?? false;
+  const url = ($("#cloud-server-url")?.value || "").trim();
+  const interval = parseInt($("#cloud-poll-interval")?.value || "2", 10) || 2;
+  if (enabled && !url) {
+    showBanner("#cloud-banner", "URL Server Web SIMRS wajib diisi bila Cloud Relay aktif.", false);
+    return;
+  }
+  hideBanner("#cloud-banner");
+  withBusy(btn, async () => {
+    try {
+      await SetCloudAgent(enabled, url, interval, true);
+      state.config = await GetConfig();
+      state.service = await GetState();
+      renderAll();
+      showBanner("#cloud-banner", "Pengaturan Cloud Relay berhasil disimpan & layanan diperbarui.", true);
+    } catch (err) {
+      showBanner("#cloud-banner", errorMessage(err), false);
+    }
+  });
+}
+
+async function doRegisterCloudPrinters(btn) {
+  hideBanner("#cloud-banner");
+  withBusy(btn, async () => {
+    try {
+      const count = await RegisterPrintersToCloud();
+      showBanner("#cloud-banner", `Berhasil mendaftarkan ${count} printer lokal ke server web!`, true);
+    } catch (err) {
+      showBanner("#cloud-banner", errorMessage(err), false);
+    }
+  });
+}
+
+async function doRegisterSingleCloudPrinter(btn) {
+  const printerName = btn.dataset.printerName;
+  const cfg = state.config;
+  const baseURL = (cfg?.cloud_server_url || "").replace(/\/+$/, "");
+  if (!baseURL) {
+    showBanner("#printer-banner", "URL Server Web belum diatur. Atur di tab Cloud Relay terlebih dahulu.", false);
+    return;
+  }
+  withBusy(btn, async () => {
+    try {
+      const res = await fetch(`${baseURL}/agent/printing/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: printerName,
+          queue_name: printerName,
+          connection_type: "usb",
+          platform: "windows",
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`Server web mengembalikan HTTP ${res.status}`);
+      }
+      showBanner("#printer-banner", `Printer '${printerName}' berhasil didaftarkan ke Web SIMRS!`, true);
+    } catch (err) {
+      showBanner("#printer-banner", `Gagal mendaftarkan printer: ${errorMessage(err)}`, false);
+    }
+  });
+}
+
 // ------------------------------------------------------------------ event
 
 function bindEvents() {
@@ -870,6 +971,15 @@ function bindEvents() {
         break;
       case "save-listen":
         doSaveListen();
+        break;
+      case "save-cloud-config":
+        doSaveCloudConfig(btn);
+        break;
+      case "register-cloud-printers":
+        doRegisterCloudPrinters(btn);
+        break;
+      case "register-single-cloud-printer":
+        doRegisterSingleCloudPrinter(btn);
         break;
       case "save-settings":
         doSaveSettings();
@@ -1332,6 +1442,7 @@ function renderMainShell() {
     <div class="tabs" id="tabs">
       <button data-tab="beranda" class="active">Beranda</button>
       <button data-tab="printers">Printer</button>
+      <button data-tab="cloud">🌐 Cloud Relay</button>
       <button data-tab="origin">Alamat Diizinkan</button>
       <button data-tab="settings">Pengaturan</button>
       <button data-tab="log">Log</button>
@@ -1347,6 +1458,7 @@ function renderMainShell() {
           <div class="kv"><span class="k">Aktif selama</span><span class="v" id="bd-uptime">—</span></div>
           <div class="kv"><span class="k">Printer terdeteksi</span><span class="v" id="bd-printers">Memuat…</span></div>
           <div class="kv"><span class="k">File konfigurasi</span><span class="v" id="bd-path">…</span></div>
+          <div class="kv"><span class="k">Cloud Relay Web</span><span class="v" id="bd-cloud-status">…</span></div>
           <div class="banner" id="service-error" role="alert"></div>
         </div>
         <div class="card">
@@ -1410,6 +1522,59 @@ function renderMainShell() {
             <div class="printer-grid" id="network-printer-list" style="margin-top:12px">
               <p class="muted">Memindai printer di jaringan via Bonjour/mDNS & Active LAN…</p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-pane" id="pane-cloud">
+        <div class="card">
+          <div class="section-heading">
+            <h2>Centralized Cloud Print Relay</h2>
+            <div id="cloud-status-badge"></div>
+          </div>
+          <p class="muted">
+            Memungkinkan komputer lain di luar jaringan (PC B, C, D) mencetak ke printer USB komputer ini melalui website SIMRS tanpa perlu instal driver apapun atau berada di 1 Wi-Fi yang sama.
+          </p>
+          <div class="banner" id="cloud-banner" style="margin-top:10px"></div>
+          <div style="margin-top:16px">
+            <label class="check" style="margin-bottom:12px">
+              <input type="checkbox" id="cloud-agent-enabled" />
+              <div>
+                <div class="check-label">Aktifkan Cloud Print Relay</div>
+                <div class="check-desc">Komputer ini akan mendengarkan antrean tugas cetak dari website pusat secara terus-menerus.</div>
+              </div>
+            </label>
+
+            <div style="margin-top:12px">
+              <label style="font-weight:600;font-size:0.88rem;display:block;margin-bottom:4px">Alamat Server Website SIMRS</label>
+              <div class="row grow">
+                <input id="cloud-server-url" placeholder="http://192.168.1.100:8081 atau https://simrs.klinik.com" aria-label="URL Server Web" />
+                <button class="primary" data-action="save-cloud-config">Simpan & Terapkan</button>
+              </div>
+              <p class="muted" style="margin-top:6px;font-size:0.8rem">
+                Masukkan URL backend server website SIMRS tempat antrean cetak dikirim oleh PC lain.
+              </p>
+            </div>
+
+            <div style="margin-top:16px">
+              <label style="font-weight:600;font-size:0.88rem;display:block;margin-bottom:4px">Interval Cek Antrean (Detik)</label>
+              <div class="row">
+                <input id="cloud-poll-interval" type="number" min="1" max="60" value="2" style="width:100px" aria-label="Interval Polling" />
+                <span class="muted" style="align-self:center">detik (bawaan: 2 detik)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Registrasi Seluruh Printer ke Website</h2>
+          <p class="muted">
+            Daftarkan semua printer USB / lokal yang terhubung di PC ini ke website SIMRS, sehingga PC lain dapat langsung memilih printer ini saat mencetak dokumen dari browser.
+          </p>
+          <div class="row" style="margin-top:12px">
+            <button class="primary" data-action="register-cloud-printers">
+              ${ICONS.cloud} Daftarkan Seluruh Printer ke Website Sekarang
+            </button>
           </div>
         </div>
       </div>

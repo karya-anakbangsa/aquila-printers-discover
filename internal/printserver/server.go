@@ -70,8 +70,32 @@ func New(cfg Config, events EventLog) *Server {
 	app.Post("/printers/raw", server.submitRaw)
 	app.Post("/print-raw", server.submitRaw)
 	app.Post("/print/:documentType", server.submitPDF)
+	app.Post("/agent/config", server.setCloudAgentConfigEndpoint)
 	server.app = app
 	return server
+}
+
+func (s *Server) setCloudAgentConfigEndpoint(c *fiber.Ctx) error {
+	var body struct {
+		Enabled   *bool  `json:"enabled"`
+		ServerURL string `json:"server_url"`
+		Interval  int    `json:"interval"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "format konfigurasi tidak valid")
+	}
+	s.mu.Lock()
+	if body.Enabled != nil {
+		s.cfg.CloudAgentEnabled = *body.Enabled
+	}
+	if body.ServerURL != "" {
+		s.cfg.CloudServerURL = body.ServerURL
+	}
+	if body.Interval > 0 {
+		s.cfg.CloudPollInterval = body.Interval
+	}
+	s.mu.Unlock()
+	return c.JSON(fiber.Map{"status": "ok", "config": s.Config()})
 }
 
 // App mengembalikan aplikasi Fiber yang dipakai (untuk pengujian).
@@ -84,6 +108,8 @@ func (s *Server) Listen(addr string) error {
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
+	// Jalankan Cloud Print Relay background worker
+	go s.StartCloudAgent(context.Background())
 	return s.app.Listen(addr)
 }
 

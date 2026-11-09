@@ -1,7 +1,10 @@
 {
   "listen": "127.0.0.1:17891",
   "allowed_origins": [
-    "https://farmasi.example.org",
-    "http://localhost:4200"
-  ]
+    "http://localhost:4200",
+    "http://127.0.0.1:4200"
+  ],
+  "cloud_agent_enabled": true,
+  "cloud_server_url": "http://localhost:8081",
+  "cloud_poll_interval_sec": 2
 }
