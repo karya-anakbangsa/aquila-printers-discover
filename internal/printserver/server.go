@@ -324,12 +324,55 @@ func listCUPSPrinters(ctx context.Context) ([]LocalPrinter, error) {
 }
 
 func listWindowsPrinters(ctx context.Context) ([]LocalPrinter, error) {
-	script := `$ErrorActionPreference = 'Stop'; $ports = @{}; Get-CimInstance Win32_TCPIPPrinterPort -ErrorAction SilentlyContinue | ForEach-Object { $ports[$_.Name] = $_.HostAddress }; $items = @(Get-CimInstance Win32_Printer | ForEach-Object { $state = if ($_.WorkOffline -or $_.PrinterStatus -eq 7) { 'offline' } elseif ($_.PrinterStatus -eq 8 -or $_.PrinterStatus -eq 6) { 'disabled' } elseif ($_.PrinterStatus -eq 4) { 'printing' } elseif ($_.PrinterStatus -eq 3 -or $_.PrinterStatus -eq 0) { 'ready' } else { 'unknown' }; [PSCustomObject]@{ name = $_.Name; state = $state; is_default = $_.Default; driver = $_.DriverName; port = $_.PortName; ip = $ports[$_.PortName] } }); ConvertTo-Json -InputObject $items -Compress`
+	script := `$ErrorActionPreference = 'Stop'; $ports = @{}; Get-CimInstance Win32_TCPIPPrinterPort -ErrorAction SilentlyContinue | ForEach-Object { $ports[$_.Name] = $_.HostAddress }; $pStatus = @{}; try { Get-Printer -ErrorAction SilentlyContinue | ForEach-Object { $pStatus[$_.Name] = [string]$_.PrinterStatus } } catch {}; $items = @(Get-CimInstance Win32_Printer | ForEach-Object { $st = $pStatus[$_.Name]; $isOff = $_.WorkOffline -or ($_.PrinterStatus -eq 7) -or (($_.PrinterState -band 128) -ne 0) -or (($_.PrinterState -band 2) -ne 0) -or (($_.PrinterState -band 1024) -ne 0) -or ($_.ExtendedPrinterStatus -eq 8) -or ($_.ExtendedPrinterStatus -eq 9) -or ($_.ExtendedPrinterStatus -eq 12) -or ($st -match 'Offline|NotAvailable|Error|DeviceNotSelected'); $state = if ($isOff) { 'offline' } elseif ($_.PrinterStatus -eq 8 -or $_.PrinterStatus -eq 6 -or $st -match 'Paused|Stopped') { 'disabled' } elseif ($_.PrinterStatus -eq 4 -or $st -match 'Printing') { 'printing' } elseif ($_.PrinterStatus -eq 3 -or $_.PrinterStatus -eq 0 -or $st -match 'Normal') { 'ready' } else { 'unknown' }; $ipAddr = $ports[$_.PortName]; if (-not $ipAddr -and $_.PortName -match '^IP_(.+)$') { $ipAddr = $matches[1] }; [PSCustomObject]@{ name = $_.Name; state = $state; is_default = $_.Default; driver = $_.DriverName; port = $_.PortName; ip = $ipAddr } }); ConvertTo-Json -InputObject $items -Compress`
 	output, err := hiddenWindowsCommand(ctx, script).CombinedOutput()
 	if err != nil {
 		return nil, commandFailure("Get-CimInstance Win32_Printer", output, err)
 	}
-	return parseWindowsPrinters(output)
+	printers, err := parseWindowsPrinters(output)
+	if err != nil {
+		return nil, err
+	}
+	verifyNetworkPrintersReachability(printers)
+	return printers, nil
+}
+
+func verifyNetworkPrintersReachability(printers []LocalPrinter) {
+	var wg sync.WaitGroup
+	for i := range printers {
+		p := &printers[i]
+		if p.ConnectionType != "network" && p.IP == "" {
+			continue
+		}
+		if p.State == "offline" || p.State == "disabled" {
+			if p.StatusDetail == "" && p.IP != "" {
+				p.StatusDetail = fmt.Sprintf("Offline (%s)", p.IP)
+			}
+			continue
+		}
+		if p.IP != "" {
+			wg.Add(1)
+			go func(ptr *LocalPrinter) {
+				defer wg.Done()
+				dialer := net.Dialer{Timeout: 350 * time.Millisecond}
+				ports := []string{"9100", "631", "80", "515"}
+				reachable := false
+				for _, port := range ports {
+					conn, err := dialer.Dial("tcp", net.JoinHostPort(ptr.IP, port))
+					if err == nil {
+						_ = conn.Close()
+						reachable = true
+						break
+					}
+				}
+				if !reachable {
+					ptr.State = "offline"
+					ptr.StatusDetail = fmt.Sprintf("Beda Jaringan (%s tidak terjangkau)", ptr.IP)
+				}
+			}(p)
+		}
+	}
+	wg.Wait()
 }
 
 func parseWindowsPrinters(output []byte) ([]LocalPrinter, error) {
@@ -351,6 +394,10 @@ func parseWindowsPrinters(output []byte) ([]LocalPrinter, error) {
 	}
 	for index := range printers {
 		printers[index].URI = utils.WindowsQueueURI(printers[index].Name)
+		if printers[index].IP == "" && strings.HasPrefix(strings.ToUpper(printers[index].Port), "IP_") {
+			printers[index].IP = strings.TrimPrefix(printers[index].Port, "IP_")
+			printers[index].IP = strings.TrimPrefix(printers[index].IP, "ip_")
+		}
 		printers[index].ConnectionType = DetermineConnectionType(printers[index].Port, printers[index].Driver, printers[index].IP)
 		if IsThermalOrPOS(printers[index].Name, printers[index].Driver, printers[index].Port) {
 			printers[index].PrinterType = "thermal"
@@ -757,6 +804,16 @@ func (s *Server) corsMiddleware(c *fiber.Ctx) error {
 		if origin == candidate {
 			allowed = true
 			break
+		}
+	}
+	// Otomatis izinkan semua origin dari IP private lokal LAN (192.168.x.x, 10.x.x.x, 172.16-31.x.x), localhost, atau domain .local
+	if !allowed && origin != "" {
+		if u, err := url.Parse(origin); err == nil {
+			host := u.Hostname()
+			ip := net.ParseIP(host)
+			if (ip != nil && (ip.IsPrivate() || ip.IsLoopback())) || host == "localhost" || strings.HasSuffix(strings.ToLower(host), ".local") {
+				allowed = true
+			}
 		}
 	}
 	if !allowed {

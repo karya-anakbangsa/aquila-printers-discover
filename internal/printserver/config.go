@@ -13,9 +13,9 @@ import (
 	"github.com/RSISA-Semarang/rsisa-print-server/internal/utils"
 )
 
-// DefaultListen adalah alamat dengarkan bawaan; hanya loopback agar tidak
-// bisa diakses dari jaringan lain.
-const DefaultListen = "127.0.0.1:17891"
+// DefaultListen adalah alamat dengarkan bawaan; 0.0.0.0 agar siap pakai di LAN
+// tanpa perlu konfigurasi manual dari user (Plug & Play Zero-Config).
+const DefaultListen = "0.0.0.0:17891"
 
 // DefaultOrigins adalah daftar origin bawaan saat print-server.json dibuat
 // pertama kali oleh aplikasi desktop.
@@ -46,6 +46,7 @@ type LocalPrinter struct {
 	URI            string `json:"uri,omitempty"`
 	ConnectionType string `json:"connection_type,omitempty"`
 	PrinterType    string `json:"printer_type,omitempty"` // "thermal" atau "document"
+	StatusDetail   string `json:"status_detail,omitempty"`
 }
 
 // IsThermalOrPOS checks if a printer name, driver, or port indicates a thermal receipt / label printer.

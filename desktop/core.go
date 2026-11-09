@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -71,6 +72,11 @@ func NewCore(paths Paths) (*Core, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Otomatis upgrade listen address dari 127.0.0.1 ke 0.0.0.0 untuk Plug & Play di LAN (Zero-Config)
+	if cfg.Listen == "127.0.0.1:17891" || strings.HasPrefix(cfg.Listen, "127.0.0.1:") {
+		cfg.Listen = "0.0.0.0:17891"
+		_ = printserver.SaveConfig(paths.PrintServer, cfg)
+	}
 	core := &Core{
 		paths:   paths,
 		logs:    NewLogBuffer(),
@@ -79,6 +85,7 @@ func NewCore(paths Paths) (*Core, error) {
 	}
 	core.settings = loadSettings(paths.Settings)
 	core.service = NewServiceController(core.currentConfig, core.log, core.onServiceState)
+	ensureWindowsFirewall(core.log)
 	return core, nil
 }
 
@@ -538,3 +545,19 @@ func (c *Core) ConfigPath() string { return c.paths.PrintServer }
 
 // ConfigDir mengembalikan folder konfigurasi.
 func (c *Core) ConfigDir() string { return c.paths.Dir }
+
+func ensureWindowsFirewall(logger func(level, msg string)) {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	go func() {
+		checkCmd := exec.Command("netsh", "advfirewall", "firewall", "show", "rule", "name=RSISA Printer Server Port 17891")
+		if err := checkCmd.Run(); err == nil {
+			return
+		}
+		addCmd := exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name=RSISA Printer Server Port 17891", "dir=in", "action=allow", "protocol=TCP", "localport=17891", "profile=any")
+		if err := addCmd.Run(); err == nil {
+			logger("INFO", "Aturan Windows Firewall untuk port 17891 berhasil ditambahkan secara otomatis")
+		}
+	}()
+}

@@ -280,10 +280,14 @@ function renderPrinters(error = null) {
     else if (p.connection_type === "serial") serialCount++;
   });
 
-  // Filter hanya printer berstatus Ready untuk tab Printer OS
+  // Pisahkan printer berstatus Ready dan printer yang sedang Offline / Beda Jaringan
   const readyList = list
     .map((p, origIdx) => ({ ...p, _origIndex: origIdx }))
     .filter((p) => (p.state || "").toLowerCase() === "ready" || p.is_ready);
+
+  const offlineList = list
+    .map((p, origIdx) => ({ ...p, _origIndex: origIdx }))
+    .filter((p) => (p.state || "").toLowerCase() !== "ready" && !p.is_ready);
 
   if (statsEl) {
     statsEl.innerHTML = `
@@ -293,16 +297,6 @@ function renderPrinters(error = null) {
       <div class="printer-stat-chip">Wi-Fi / LAN: <b>${netCount}</b></div>
       ${serialCount > 0 ? `<div class="printer-stat-chip">Serial: <b>${serialCount}</b></div>` : ""}
     `;
-  }
-
-  if (readyList.length === 0) {
-    listEl.innerHTML = `
-      <div class="card" style="background:var(--bg);border-style:dashed;text-align:center;padding:24px 16px">
-        <p style="font-weight:600;margin-bottom:6px">Tidak ada printer OS yang berstatus Ready</p>
-        <p class="muted">Ditemukan ${list.length} printer di OS, tetapi seluruhnya saat ini berstatus Offline atau nonaktif. Pastikan kabel printer terhubung dan printer dinyalakan.</p>
-      </div>
-    `;
-    return;
   }
 
   const connBadge = (p) => {
@@ -337,49 +331,92 @@ function renderPrinters(error = null) {
 
   const availablePorts = state.availablePorts || [];
 
-  listEl.innerHTML = readyList
-    .map((p) => {
-      const idx = p._origIndex;
-      const isThermal = p.printer_type === "thermal" || p.connection_type === "serial" || /POS|THERMAL|RECEIPT|STRUK|KASIR|58MM|80MM|XP-|TM-/i.test(p.name + " " + (p.driver || ""));
-      const currentPort = (p.port || "").trim();
-      
-      // Susun opsi port: port saat ini + port yang terdeteksi
-      const portOptions = [...new Set([currentPort, ...availablePorts].filter(Boolean))].sort();
+  const readyHTML = readyList.length === 0
+    ? `
+      <div class="card" style="background:var(--bg);border-style:dashed;text-align:center;padding:24px 16px">
+        <p style="font-weight:600;margin-bottom:6px">Tidak ada printer OS yang berstatus Ready</p>
+        <p class="muted">Ditemukan ${list.length} printer di OS, tetapi saat ini berstatus Offline atau berada di jaringan lain.</p>
+      </div>
+    `
+    : readyList
+        .map((p) => {
+          const idx = p._origIndex;
+          const isThermal = p.printer_type === "thermal" || p.connection_type === "serial" || /POS|THERMAL|RECEIPT|STRUK|KASIR|58MM|80MM|XP-|TM-/i.test(p.name + " " + (p.driver || ""));
+          const currentPort = (p.port || "").trim();
 
-      return `
-        <div class="printer-card" data-printer-name="${esc(p.name)}">
-          <div class="printer-card-header">
-            <div class="printer-name-group">
-              <span class="printer-name">${esc(p.name)}</span>
-              ${p.is_default ? '<span class="badge badge-default">Utama</span>' : ""}
-              ${connBadge(p)}
-              <span class="badge ${isThermal ? 'badge-usb' : 'badge-virtual'}">${isThermal ? 'Thermal / Struk' : 'Dokumen Biasa'}</span>
-              ${stateBadge(p.state)}
+          return `
+            <div class="printer-card" data-printer-name="${esc(p.name)}">
+              <div class="printer-card-header">
+                <div class="printer-name-group">
+                  <span class="printer-name">${esc(p.name)}</span>
+                  ${p.is_default ? '<span class="badge badge-default">Utama</span>' : ""}
+                  ${connBadge(p)}
+                  <span class="badge ${isThermal ? 'badge-usb' : 'badge-virtual'}">${isThermal ? 'Thermal / Struk' : 'Dokumen Biasa'}</span>
+                  ${stateBadge(p.state)}
+                </div>
+              </div>
+              <div class="printer-details">
+                <span>Status Hardware: <strong>Plug & Play (Otomatis Spooler Windows)</strong></span>
+                <span>Driver: <strong>${esc(p.driver || "—")}</strong></span>
+                ${p.ip ? `<span>IP: <strong>${esc(p.ip)}</strong></span>` : ""}
+                <span title="${esc(p.uri)}">Antrean OS: <code>${esc(p.name)}</code></span>
+              </div>
+
+              <!-- Aksi Cepat & Uji Cetak Dinamis (Plug & Play) -->
+              <div class="printer-actions" style="margin-top:10px">
+                <button class="primary" data-action="test-auto-printer" data-index="${idx}">
+                  ${ICONS.printer} Tes Cetak (${isThermal ? 'Struk Thermal' : 'Dokumen'})
+                </button>
+                ${
+                  !isThermal
+                    ? `<button data-action="test-raw-printer" data-index="${idx}" title="Uji kirim byte mentah">Tes Mode RAW</button>`
+                    : `<button class="secondary" data-action="test-doc-printer" data-index="${idx}" title="Uji kirim format Windows GDI">Tes Cetak Dokumen</button>`
+                }
+                <button class="icon-btn danger" data-action="clear-printer-queue" data-index="${idx}" title="Hapus seluruh dokumen macet di printer ini">${ICONS.trash} Bersihkan Antrean</button>
+              </div>
             </div>
-          </div>
-          <div class="printer-details">
-            <span>Status Hardware: <strong>Plug & Play (Otomatis Spooler Windows)</strong></span>
-            <span>Driver: <strong>${esc(p.driver || "—")}</strong></span>
-            ${p.ip ? `<span>IP: <strong>${esc(p.ip)}</strong></span>` : ""}
-            <span title="${esc(p.uri)}">Antrean OS: <code>${esc(p.name)}</code></span>
-          </div>
+          `;
+        })
+        .join("");
 
-          <!-- Aksi Cepat & Uji Cetak Dinamis (Plug & Play) -->
-          <div class="printer-actions" style="margin-top:10px">
-            <button class="primary" data-action="test-auto-printer" data-index="${idx}">
-              ${ICONS.printer} Tes Cetak (${isThermal ? 'Struk Thermal' : 'Dokumen'})
-            </button>
-            ${
-              !isThermal
-                ? `<button data-action="test-raw-printer" data-index="${idx}" title="Uji kirim byte mentah">Tes Mode RAW</button>`
-                : `<button class="secondary" data-action="test-doc-printer" data-index="${idx}" title="Uji kirim format Windows GDI">Tes Cetak Dokumen</button>`
-            }
-            <button class="icon-btn danger" data-action="clear-printer-queue" data-index="${idx}" title="Hapus seluruh dokumen macet di printer ini">${ICONS.trash} Bersihkan Antrean</button>
-          </div>
+  const offlineHTML = offlineList.length > 0
+    ? `
+      <details class="offline-printers-section" style="margin-top:20px;border:1px dashed var(--border);border-radius:8px;padding:12px;background:rgba(0,0,0,0.01)">
+        <summary style="cursor:pointer;font-weight:600;font-size:0.88rem;color:var(--muted);display:flex;align-items:center;justify-content:space-between">
+          <span>⏸️ Printer Terpasang Lainnya / Sedang Offline (${offlineList.length})</span>
+          <span style="font-size:0.75rem;font-weight:normal;opacity:0.8">Beda jaringan atau printer mati (Klik untuk melihat)</span>
+        </summary>
+        <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
+          ${offlineList
+            .map((p) => `
+              <div class="printer-card" style="opacity:0.85;border-color:var(--border)" data-printer-name="${esc(p.name)}">
+                <div class="printer-card-header">
+                  <div class="printer-name-group">
+                    <span class="printer-name">${esc(p.name)}</span>
+                    ${connBadge(p)}
+                    ${stateBadge(p.state)}
+                  </div>
+                </div>
+                <div class="printer-details">
+                  <span>Status: <strong style="color:var(--err)">${esc(p.status_detail || (p.ip ? `Tidak terhubung di jaringan ini (${p.ip})` : 'Offline di OS'))}</strong></span>
+                  <span>Driver: <strong>${esc(p.driver || "—")}</strong></span>
+                  ${p.ip ? `<span>IP: <strong>${esc(p.ip)}</strong></span>` : ""}
+                  <span title="${esc(p.uri)}">Antrean OS: <code>${esc(p.name)}</code></span>
+                </div>
+                <div class="printer-actions" style="margin-top:8px">
+                  <button class="warning" data-action="remove-os-printer" data-printer-name="${esc(p.name)}" title="Hapus antrean printer ini dari sistem operasi Windows">
+                    ${ICONS.trash} Lepas dari Komputer
+                  </button>
+                </div>
+              </div>
+            `)
+            .join("")}
         </div>
-      `;
-    })
-    .join("");
+      </details>
+    `
+    : "";
+
+  listEl.innerHTML = readyHTML + offlineHTML;
 }
 
 function loadNetworkPrinters(force = false) {
@@ -543,7 +580,7 @@ function renderSettings() {
   const st = state.settings;
   if (!$("#listen-host")) return;
   if (cfg) {
-    $("#listen-host").value = cfg.listen_host || "127.0.0.1";
+    $("#listen-host").value = cfg.listen_host || "0.0.0.0";
     $("#listen-port").value = String(cfg.listen_port || 17891);
   }
   if (st) {
@@ -957,6 +994,37 @@ function bindEvents() {
           showBanner(
             "#network-printer-banner",
             `Gagal melepas printer "${targetName}" dari OS: ${errorMessage(err)}`,
+            false
+          );
+          btn.disabled = false;
+          btn.innerHTML = oldHTML;
+        }
+        break;
+      }
+      case "remove-os-printer": {
+        const printerName = (btn.dataset.printerName || "").trim();
+        if (!printerName) break;
+        if (!confirm(`Apakah Anda yakin ingin melepas printer "${printerName}" dari sistem operasi?`)) {
+          break;
+        }
+        const oldHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `${ICONS.trash} Melepaskan…`;
+        hideBanner("#printer-banner");
+        try {
+          if (typeof RemoveNetworkPrinter === "function") {
+            await RemoveNetworkPrinter(printerName);
+            showBanner(
+              "#printer-banner",
+              `Printer "${printerName}" berhasil dilepas dari antrean sistem operasi (OS).`,
+              true
+            );
+            await loadPrinters(true);
+          }
+        } catch (err) {
+          showBanner(
+            "#printer-banner",
+            `Gagal melepas printer "${printerName}" dari OS: ${errorMessage(err)}`,
             false
           );
           btn.disabled = false;
