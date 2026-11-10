@@ -36,6 +36,7 @@ type RouteConfig struct {
 
 type LocalPrinter struct {
 	Name           string `json:"name"`
+	QueueName      string `json:"queue_name"`
 	State          string `json:"state"`
 	IsDefault      bool   `json:"is_default"`
 	OwnerPC        string `json:"owner_pc,omitempty"`

@@ -59,7 +59,7 @@ func New(cfg Config, events EventLog) *Server {
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok", "service": "rsisa-print-server"})
 	})
-	app.Get("/printers", listLocalPrinters)
+	app.Get("/printers", server.listLocalPrinters)
 	app.Get("/hosts/:ip/printers", server.listHostPrinters)
 	app.Get("/printers/discover", discoverNetworkPrinters)
 	app.Get("/printers/usb", listUSBPrinters)
@@ -215,6 +215,12 @@ func (s *Server) submitPDF(c *fiber.Ctx) error {
 	}
 	if isRaw {
 		queueName, windowsQueueErr := utils.WindowsQueueName(printer.URI)
+		if windowsQueueErr != nil {
+			if _, q, ok := remoteQueue(printer.URI); ok {
+				queueName = q
+				windowsQueueErr = nil
+			}
+		}
 		if windowsQueueErr == nil {
 			if err := utils.PrintRawToWindowsPrinter(queueName, pdf, docType); err != nil {
 				s.logf("ERROR", "POST /print/%s gagal (raw) ke %s: %v", docType, printer.Name, err)
@@ -235,7 +241,11 @@ func (s *Server) submitPDF(c *fiber.Ctx) error {
 	var ippJobID int
 	var err error
 	if host, queue, ok := remoteQueue(printer.URI); ok {
-		err = s.forwardHostPDF(ctx, host, queue, pdf, docType, route.Copies, route.Media)
+		if runtime.GOOS == "windows" && (host == "127.0.0.1" || host == "localhost" || isLocalIP(host)) {
+			err = printPDFToWindowsQueue(ctx, queue, pdf, docType, route.Copies, route.Media)
+		} else {
+			err = s.forwardHostPDF(ctx, host, queue, pdf, docType, route.Copies, route.Media)
+		}
 	} else {
 		ippJobID, err = submitPrinterPDF(ctx, printer.URI, pdf, docType, "farmasi", route.Copies, route.Media)
 	}
@@ -266,7 +276,98 @@ func (s *Server) submitPDF(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusAccepted).JSON(response)
 }
 
-func listLocalPrinters(c *fiber.Ctx) error {
+func detectLocalIPs(c *fiber.Ctx) (string, []string) {
+	var ips []string
+	seen := make(map[string]bool)
+
+	ifaces, err := net.Interfaces()
+	if err == nil {
+		for _, iface := range ifaces {
+			if (iface.Flags&net.FlagUp) == 0 || (iface.Flags&net.FlagLoopback) != 0 {
+				continue
+			}
+			addrs, err := iface.Addrs()
+			if err != nil {
+				continue
+			}
+			for _, addr := range addrs {
+				var ip net.IP
+				switch v := addr.(type) {
+				case *net.IPNet:
+					ip = v.IP
+				case *net.IPAddr:
+					ip = v.IP
+				}
+				if ip == nil || ip.IsLoopback() {
+					continue
+				}
+				ip4 := ip.To4()
+				if ip4 == nil {
+					continue
+				}
+				ipStr := ip4.String()
+				if strings.HasPrefix(ipStr, "169.254.") {
+					continue
+				}
+				if !seen[ipStr] {
+					seen[ipStr] = true
+					ips = append(ips, ipStr)
+				}
+			}
+		}
+	}
+
+	connIP := ""
+	if c != nil && c.Context() != nil {
+		localIP := c.Context().LocalIP()
+		if localIP != nil {
+			str := localIP.String()
+			if str != "" && str != "127.0.0.1" && str != "0.0.0.0" && str != "::" && str != "::1" {
+				connIP = str
+			}
+		}
+	}
+
+	var primaryIP string
+	if connIP != "" {
+		primaryIP = connIP
+		if !seen[primaryIP] {
+			ips = append([]string{primaryIP}, ips...)
+			seen[primaryIP] = true
+		}
+	} else {
+		for _, ip := range ips {
+			if strings.HasPrefix(ip, "192.168.") || strings.HasPrefix(ip, "10.") || strings.HasPrefix(ip, "172.") {
+				primaryIP = ip
+				break
+			}
+		}
+		if primaryIP == "" && len(ips) > 0 {
+			primaryIP = ips[0]
+		}
+	}
+
+	if primaryIP == "" {
+		primaryIP = "127.0.0.1"
+	}
+	if len(ips) == 0 {
+		ips = []string{primaryIP}
+	}
+
+	return primaryIP, ips
+}
+
+func isLocalIP(host string) bool {
+	_, ips := detectLocalIPs(nil)
+	for _, ip := range ips {
+		if ip == host {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) listLocalPrinters(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 10*time.Second)
 	defer cancel()
 	var printers []LocalPrinter
@@ -280,18 +381,68 @@ func listLocalPrinters(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotImplemented, "deteksi printer belum didukung pada sistem operasi ini")
 	}
 	if err != nil {
-		return fiber.NewError(fiber.StatusServiceUnavailable, "tidak dapat membaca antrean printer pada PC ini: "+err.Error())
+		if s != nil {
+			s.logf("WARN", "deteksi antrean printer OS: %v", err)
+		}
+		printers = []LocalPrinter{}
 	}
 	if printers == nil {
 		printers = []LocalPrinter{}
 	}
+
 	hostname, _ := os.Hostname()
-	ownerIP := c.Context().LocalIP().String()
-	for i := range printers {
-		printers[i].OwnerPC = hostname
-		printers[i].OwnerIP = ownerIP
+	ownerIP, ipAddresses := detectLocalIPs(c)
+
+	port := "17891"
+	if s != nil {
+		if _, p, err := net.SplitHostPort(s.Config().Listen); err == nil && p != "" {
+			port = p
+		}
 	}
-	return c.JSON(fiber.Map{"data": printers, "platform": runtime.GOOS})
+
+	type printerItemResponse struct {
+		Name           string `json:"name"`
+		QueueName      string `json:"queue_name"`
+		State          string `json:"state"`
+		IsDefault      bool   `json:"is_default"`
+		OwnerPC        string `json:"owner_pc"`
+		OwnerIP        string `json:"owner_ip"`
+		Driver         string `json:"driver"`
+		Port           string `json:"port"`
+		ConnectionType string `json:"connection_type"`
+		PrinterType    string `json:"printer_type"`
+		URI            string `json:"uri"`
+	}
+
+	items := make([]printerItemResponse, len(printers))
+	for i, p := range printers {
+		qName := p.QueueName
+		if qName == "" {
+			qName = p.Name
+		}
+		uri := fmt.Sprintf("ipp://%s:%s/printers/%s", ownerIP, port, base64.RawURLEncoding.EncodeToString([]byte(p.Name)))
+		items[i] = printerItemResponse{
+			Name:           p.Name,
+			QueueName:      qName,
+			State:          p.State,
+			IsDefault:      p.IsDefault,
+			OwnerPC:        hostname,
+			OwnerIP:        ownerIP,
+			Driver:         p.Driver,
+			Port:           p.Port,
+			ConnectionType: p.ConnectionType,
+			PrinterType:    p.PrinterType,
+			URI:            uri,
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"machine_name": hostname,
+		"owner_ip":     ownerIP,
+		"ip_addresses": ipAddresses,
+		"platform":     runtime.GOOS,
+		"data":         items,
+	})
 }
 
 func discoverNetworkPrinters(c *fiber.Ctx) error {
@@ -419,6 +570,7 @@ func parseWindowsPrinters(output []byte) ([]LocalPrinter, error) {
 		printers = []LocalPrinter{single}
 	}
 	for index := range printers {
+		printers[index].QueueName = printers[index].Name
 		printers[index].URI = utils.WindowsQueueURI(printers[index].Name)
 		if printers[index].IP == "" && strings.HasPrefix(strings.ToUpper(printers[index].Port), "IP_") {
 			printers[index].IP = strings.TrimPrefix(printers[index].Port, "IP_")
@@ -1029,6 +1181,8 @@ func (s *Server) submitRaw(c *fiber.Ctx) error {
 			if req.URI != "" && printerName == "" {
 				if qName, err := utils.WindowsQueueName(req.URI); err == nil {
 					printerName = qName
+				} else if _, q, ok := remoteQueue(req.URI); ok {
+					printerName = q
 				}
 			}
 			if req.IsBase64 {
