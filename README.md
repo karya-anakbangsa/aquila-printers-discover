@@ -133,9 +133,9 @@ git remote add origin git@github.com:RSISA-Semarang/rsisa-printer-server.git
 git branch -M main
 git push -u origin main
 
-# 4. Buat dan dorong tag versi (contoh: v1.0.10)
-git tag v1.0.10
-git push origin v1.0.10
+# 4. Buat dan dorong tag versi (contoh: v1.0.11)
+git tag v1.0.11
+git push origin v1.0.11
 
 # 5. Tunggu Actions selesai → halaman Releases otomatis terisi semua installer
 ```

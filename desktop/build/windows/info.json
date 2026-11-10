@@ -1,10 +1,10 @@
 {
 	"fixed": {
-		"file_version": "1.0.10"
+		"file_version": "1.0.11"
 	},
 	"info": {
 		"0409": {
-			"ProductVersion": "1.0.10",
+			"ProductVersion": "1.0.11",
 			"CompanyName": "CV ANAK BANGSA",
 			"FileDescription": "Panel kendali server printer lokal RSISA",
 			"LegalCopyright": "(c) 2026, CV ANAK BANGSA",

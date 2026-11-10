@@ -2,7 +2,7 @@
 # ke halaman GitHub Releases saat sebuah tag v* didorong.
 #
 # Alur:
-#   git tag v1.0.10 && git push origin v1.0.10
+#   git tag v1.0.11 && git push origin v1.0.11
 #   → build-macos  : RSISA-Printer-Server-macos-universal.dmg + .pkg
 #   → build-windows: RSISA-Printer-Server-windows-amd64-installer.exe + .exe
 #   → build-linux  : rsisa-printer-server_<versi>_amd64.deb + .rpm + .tar.gz
