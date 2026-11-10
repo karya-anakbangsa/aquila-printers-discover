@@ -276,45 +276,88 @@ func (s *Server) submitPDF(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusAccepted).JSON(response)
 }
 
-func detectLocalIPs(c *fiber.Ctx) (string, []string) {
-	var ips []string
-	seen := make(map[string]bool)
+func isVirtualInterfaceName(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	for _, kw := range []string{"vethernet", "wsl", "hyper-v", "docker", "vmware", "virtualbox", "vbox", "br-", "veth"} {
+		if strings.Contains(lower, kw) {
+			return true
+		}
+	}
+	return false
+}
 
+func collectHostIPv4s() (physicalIPs []string, allIPs []string) {
+	seenAll := make(map[string]bool)
+	seenPhys := make(map[string]bool)
 	ifaces, err := net.Interfaces()
-	if err == nil {
-		for _, iface := range ifaces {
-			if (iface.Flags&net.FlagUp) == 0 || (iface.Flags&net.FlagLoopback) != 0 {
+	if err != nil {
+		return nil, nil
+	}
+	for _, iface := range ifaces {
+		if (iface.Flags&net.FlagUp) == 0 || (iface.Flags&net.FlagLoopback) != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		virtual := isVirtualInterfaceName(iface.Name)
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil || ip.IsLoopback() {
 				continue
 			}
-			addrs, err := iface.Addrs()
-			if err != nil {
+			ip4 := ip.To4()
+			if ip4 == nil {
 				continue
 			}
-			for _, addr := range addrs {
-				var ip net.IP
-				switch v := addr.(type) {
-				case *net.IPNet:
-					ip = v.IP
-				case *net.IPAddr:
-					ip = v.IP
-				}
-				if ip == nil || ip.IsLoopback() {
-					continue
-				}
-				ip4 := ip.To4()
-				if ip4 == nil {
-					continue
-				}
-				ipStr := ip4.String()
-				if strings.HasPrefix(ipStr, "169.254.") {
-					continue
-				}
-				if !seen[ipStr] {
-					seen[ipStr] = true
-					ips = append(ips, ipStr)
-				}
+			ipStr := ip4.String()
+			if strings.HasPrefix(ipStr, "169.254.") {
+				continue
+			}
+			if !seenAll[ipStr] {
+				seenAll[ipStr] = true
+				allIPs = append(allIPs, ipStr)
+			}
+			if !virtual && !seenPhys[ipStr] {
+				seenPhys[ipStr] = true
+				physicalIPs = append(physicalIPs, ipStr)
 			}
 		}
+	}
+	return physicalIPs, allIPs
+}
+
+func pickPrimaryPrivateIP(ips []string) string {
+	for _, prefix := range []string{"192.168.", "10.", "172."} {
+		for _, ip := range ips {
+			if strings.HasPrefix(ip, prefix) {
+				return ip
+			}
+		}
+	}
+	if len(ips) > 0 {
+		return ips[0]
+	}
+	return ""
+}
+
+func detectLocalIPs(c *fiber.Ctx) (string, []string) {
+	physicalIPs, allIPs := collectHostIPv4s()
+	ips := physicalIPs
+	if len(ips) == 0 {
+		ips = allIPs
+	}
+
+	seen := make(map[string]bool, len(ips))
+	for _, ip := range ips {
+		seen[ip] = true
 	}
 
 	connIP := ""
@@ -336,15 +379,7 @@ func detectLocalIPs(c *fiber.Ctx) (string, []string) {
 			seen[primaryIP] = true
 		}
 	} else {
-		for _, ip := range ips {
-			if strings.HasPrefix(ip, "192.168.") || strings.HasPrefix(ip, "10.") || strings.HasPrefix(ip, "172.") {
-				primaryIP = ip
-				break
-			}
-		}
-		if primaryIP == "" && len(ips) > 0 {
-			primaryIP = ips[0]
-		}
+		primaryIP = pickPrimaryPrivateIP(ips)
 	}
 
 	if primaryIP == "" {
@@ -358,8 +393,8 @@ func detectLocalIPs(c *fiber.Ctx) (string, []string) {
 }
 
 func isLocalIP(host string) bool {
-	_, ips := detectLocalIPs(nil)
-	for _, ip := range ips {
+	_, allIPs := collectHostIPv4s()
+	for _, ip := range allIPs {
 		if ip == host {
 			return true
 		}
@@ -436,12 +471,20 @@ func (s *Server) listLocalPrinters(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.JSON(fiber.Map{
-		"machine_name": hostname,
-		"owner_ip":     ownerIP,
-		"ip_addresses": ipAddresses,
-		"platform":     runtime.GOOS,
-		"data":         items,
+	type localPrintersResponse struct {
+		MachineName string                `json:"machine_name"`
+		OwnerIP     string                `json:"owner_ip"`
+		IPAddresses []string              `json:"ip_addresses"`
+		Platform    string                `json:"platform"`
+		Data        []printerItemResponse `json:"data"`
+	}
+
+	return c.JSON(localPrintersResponse{
+		MachineName: hostname,
+		OwnerIP:     ownerIP,
+		IPAddresses: ipAddresses,
+		Platform:    runtime.GOOS,
+		Data:        items,
 	})
 }
 

@@ -47,6 +47,7 @@ import "./style.css";
 // Batas baris log di DOM. Sama dengan maxLogRows di sisi Go: memori UI tetap
 // datar walau layanan berjalan berhari-hari.
 const MAX_LOG_LINES = 200;
+const SHOW_CLOUD_RELAY_UI = false;
 
 const isPopup = new URLSearchParams(location.search).has("popup");
 
@@ -380,9 +381,13 @@ function renderPrinters(error = null) {
                 <button class="primary" data-action="test-auto-printer" data-index="${idx}">
                   ${ICONS.printer} Tes Cetak (${isThermal ? 'Struk Thermal' : 'Dokumen'})
                 </button>
-                <button class="secondary" data-action="register-single-cloud-printer" data-printer-name="${esc(p.name)}" title="Daftarkan printer ini ke Website SIMRS agar PC lain bisa langsung mencetak ke sini">
+                ${
+                  SHOW_CLOUD_RELAY_UI
+                    ? `<button class="secondary" data-action="register-single-cloud-printer" data-printer-name="${esc(p.name)}" title="Daftarkan printer ini ke Website SIMRS agar PC lain bisa langsung mencetak ke sini">
                   ${ICONS.cloud} Daftarkan ke Web
-                </button>
+                </button>`
+                    : ""
+                }
                 ${
                   !isThermal
                     ? `<button data-action="test-raw-printer" data-index="${idx}" title="Uji kirim byte mentah">Tes Mode RAW</button>`
@@ -1442,7 +1447,7 @@ function renderMainShell() {
     <div class="tabs" id="tabs">
       <button data-tab="beranda" class="active">Beranda</button>
       <button data-tab="printers">Printer</button>
-      <button data-tab="cloud">🌐 Cloud Relay</button>
+      ${SHOW_CLOUD_RELAY_UI ? `<button data-tab="cloud">🌐 Cloud Relay</button>` : ""}
       <button data-tab="origin">Alamat Diizinkan</button>
       <button data-tab="settings">Pengaturan</button>
       <button data-tab="log">Log</button>
@@ -1458,7 +1463,7 @@ function renderMainShell() {
           <div class="kv"><span class="k">Aktif selama</span><span class="v" id="bd-uptime">—</span></div>
           <div class="kv"><span class="k">Printer terdeteksi</span><span class="v" id="bd-printers">Memuat…</span></div>
           <div class="kv"><span class="k">File konfigurasi</span><span class="v" id="bd-path">…</span></div>
-          <div class="kv"><span class="k">Cloud Relay Web</span><span class="v" id="bd-cloud-status">…</span></div>
+          ${SHOW_CLOUD_RELAY_UI ? `<div class="kv"><span class="k">Cloud Relay Web</span><span class="v" id="bd-cloud-status">…</span></div>` : ""}
           <div class="banner" id="service-error" role="alert"></div>
         </div>
         <div class="card">
@@ -1526,7 +1531,9 @@ function renderMainShell() {
         </div>
       </div>
 
-      <div class="tab-pane" id="pane-cloud">
+      ${
+        SHOW_CLOUD_RELAY_UI
+          ? `<div class="tab-pane" id="pane-cloud">
         <div class="card">
           <div class="section-heading">
             <h2>Centralized Cloud Print Relay</h2>
@@ -1577,7 +1584,9 @@ function renderMainShell() {
             </button>
           </div>
         </div>
-      </div>
+      </div>`
+          : ""
+      }
 
       <div class="tab-pane" id="pane-origin">
         <div class="card">

@@ -59,3 +59,15 @@ func TestGetPrintersResponseStructure(t *testing.T) {
 	pretty, _ := json.MarshalIndent(result, "", "  ")
 	t.Logf("Response JSON:\n%s", string(pretty))
 }
+
+func TestPickPrimaryPrivateIPPrioritizesLANOverVirtual(t *testing.T) {
+	if got := pickPrimaryPrivateIP([]string{"172.30.0.1", "192.168.9.0"}); got != "192.168.9.0" {
+		t.Fatalf("pickPrimaryPrivateIP = %q, want 192.168.9.0", got)
+	}
+	if !isVirtualInterfaceName("vEthernet (WSL (Hyper-V firewall))") {
+		t.Fatal("expected vEthernet (WSL) to be detected as virtual interface")
+	}
+	if isVirtualInterfaceName("Wi-Fi") {
+		t.Fatal("Wi-Fi must not be marked virtual")
+	}
+}

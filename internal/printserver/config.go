@@ -81,11 +81,11 @@ func DetermineConnectionType(port, driver, ip string) string {
 	if strings.HasPrefix(portUpper, "COM") || strings.HasPrefix(portUpper, "LPT") {
 		return "serial"
 	}
+	if strings.HasPrefix(portUpper, "FILE:") || strings.HasPrefix(portUpper, "PORTPROMPT:") || strings.Contains(portUpper, `\PIPE\`) || strings.Contains(driverUpper, "PDF") || strings.Contains(driverUpper, "XPS") {
+		return "virtual"
+	}
 	if ip != "" || strings.HasPrefix(portUpper, "IP_") || strings.HasPrefix(portUpper, "TCP") || strings.HasPrefix(portUpper, "WSD-") || strings.Contains(portUpper, ".") {
 		return "network"
-	}
-	if strings.HasPrefix(portUpper, "FILE:") || strings.HasPrefix(portUpper, "PORTPROMPT:") || strings.Contains(driverUpper, "PDF") || strings.Contains(driverUpper, "XPS") {
-		return "virtual"
 	}
 	if portUpper != "" {
 		return "local"
