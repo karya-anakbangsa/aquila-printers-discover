@@ -154,6 +154,7 @@ func (c *ServiceController) start() error {
 	go func() {
 		defer close(done)
 		defer cancel()
+		go server.StartCloudAgent(ctx)
 		if err := server.App().Listener(listener); err != nil && ctx.Err() == nil {
 			c.fail(listenError(err, cfg.Listen))
 		}

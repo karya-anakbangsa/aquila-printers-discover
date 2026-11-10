@@ -41,11 +41,8 @@ func (s *Server) hostRequest(ctx context.Context, method, host, path string, bod
 		return nil, fmt.Errorf("IP PC harus berupa IPv4 private")
 	}
 	token := s.Config().LANAccessToken
-	if len(token) < 24 {
-		return nil, fmt.Errorf("atur lan_access_token yang sama pada kedua PC")
-	}
 	req, err := http.NewRequestWithContext(ctx, method, "http://"+net.JoinHostPort(host, "17891")+path, body)
-	if err == nil {
+	if err == nil && len(token) >= 24 {
 		req.Header.Set("X-RSISA-LAN-Token", token)
 	}
 	return req, err

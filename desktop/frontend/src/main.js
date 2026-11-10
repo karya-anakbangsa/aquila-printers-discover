@@ -39,12 +39,15 @@ import {
   ToggleService,
   UninstallApp,
   UpdateOrigin,
+  SetCloudAgent,
+  RegisterPrintersToCloud,
 } from "./api.js";
 import "./style.css";
 
 // Batas baris log di DOM. Sama dengan maxLogRows di sisi Go: memori UI tetap
 // datar walau layanan berjalan berhari-hari.
 const MAX_LOG_LINES = 200;
+const SHOW_CLOUD_RELAY_UI = false;
 
 const isPopup = new URLSearchParams(location.search).has("popup");
 
@@ -57,6 +60,7 @@ const ICONS = {
   trash: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`,
   plus: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
   check: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+  cloud: `<svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>`,
 };
 
 function normalizePrinterName(val) {
@@ -215,6 +219,16 @@ function renderBeranda() {
     }
   }
   $("#bd-path").textContent = cfg ? cfg.path : "—";
+  const cloudEl = $("#bd-cloud-status");
+  if (cloudEl) {
+    const isCloud = cfg?.cloud_agent_enabled;
+    const cloudURL = cfg?.cloud_server_url || "";
+    if (isCloud && cloudURL) {
+      cloudEl.innerHTML = `<span class="badge badge-ready">Aktif (Relay ke ${esc(cloudURL)})</span>`;
+    } else {
+      cloudEl.innerHTML = `<span class="badge badge-disabled">Nonaktif</span> <button data-tab-goto="cloud" style="margin-left:8px;padding:2px 8px;font-size:0.75rem">Atur</button>`;
+    }
+  }
 }
 
 function loadPrinters(force = false) {
@@ -280,10 +294,14 @@ function renderPrinters(error = null) {
     else if (p.connection_type === "serial") serialCount++;
   });
 
-  // Filter hanya printer berstatus Ready untuk tab Printer OS
+  // Pisahkan printer berstatus Ready dan printer yang sedang Offline / Beda Jaringan
   const readyList = list
     .map((p, origIdx) => ({ ...p, _origIndex: origIdx }))
     .filter((p) => (p.state || "").toLowerCase() === "ready" || p.is_ready);
+
+  const offlineList = list
+    .map((p, origIdx) => ({ ...p, _origIndex: origIdx }))
+    .filter((p) => (p.state || "").toLowerCase() !== "ready" && !p.is_ready);
 
   if (statsEl) {
     statsEl.innerHTML = `
@@ -293,16 +311,6 @@ function renderPrinters(error = null) {
       <div class="printer-stat-chip">Wi-Fi / LAN: <b>${netCount}</b></div>
       ${serialCount > 0 ? `<div class="printer-stat-chip">Serial: <b>${serialCount}</b></div>` : ""}
     `;
-  }
-
-  if (readyList.length === 0) {
-    listEl.innerHTML = `
-      <div class="card" style="background:var(--bg);border-style:dashed;text-align:center;padding:24px 16px">
-        <p style="font-weight:600;margin-bottom:6px">Tidak ada printer OS yang berstatus Ready</p>
-        <p class="muted">Ditemukan ${list.length} printer di OS, tetapi seluruhnya saat ini berstatus Offline atau nonaktif. Pastikan kabel printer terhubung dan printer dinyalakan.</p>
-      </div>
-    `;
-    return;
   }
 
   const connBadge = (p) => {
@@ -337,49 +345,99 @@ function renderPrinters(error = null) {
 
   const availablePorts = state.availablePorts || [];
 
-  listEl.innerHTML = readyList
-    .map((p) => {
-      const idx = p._origIndex;
-      const isThermal = p.printer_type === "thermal" || p.connection_type === "serial" || /POS|THERMAL|RECEIPT|STRUK|KASIR|58MM|80MM|XP-|TM-/i.test(p.name + " " + (p.driver || ""));
-      const currentPort = (p.port || "").trim();
-      
-      // Susun opsi port: port saat ini + port yang terdeteksi
-      const portOptions = [...new Set([currentPort, ...availablePorts].filter(Boolean))].sort();
+  const readyHTML = readyList.length === 0
+    ? `
+      <div class="card" style="background:var(--bg);border-style:dashed;text-align:center;padding:24px 16px">
+        <p style="font-weight:600;margin-bottom:6px">Tidak ada printer OS yang berstatus Ready</p>
+        <p class="muted">Ditemukan ${list.length} printer di OS, tetapi saat ini berstatus Offline atau berada di jaringan lain.</p>
+      </div>
+    `
+    : readyList
+        .map((p) => {
+          const idx = p._origIndex;
+          const isThermal = p.printer_type === "thermal" || p.connection_type === "serial" || /POS|THERMAL|RECEIPT|STRUK|KASIR|58MM|80MM|XP-|TM-/i.test(p.name + " " + (p.driver || ""));
+          const currentPort = (p.port || "").trim();
 
-      return `
-        <div class="printer-card" data-printer-name="${esc(p.name)}">
-          <div class="printer-card-header">
-            <div class="printer-name-group">
-              <span class="printer-name">${esc(p.name)}</span>
-              ${p.is_default ? '<span class="badge badge-default">Utama</span>' : ""}
-              ${connBadge(p)}
-              <span class="badge ${isThermal ? 'badge-usb' : 'badge-virtual'}">${isThermal ? 'Thermal / Struk' : 'Dokumen Biasa'}</span>
-              ${stateBadge(p.state)}
+          return `
+            <div class="printer-card" data-printer-name="${esc(p.name)}">
+              <div class="printer-card-header">
+                <div class="printer-name-group">
+                  <span class="printer-name">${esc(p.name)}</span>
+                  ${p.is_default ? '<span class="badge badge-default">Utama</span>' : ""}
+                  ${connBadge(p)}
+                  <span class="badge ${isThermal ? 'badge-usb' : 'badge-virtual'}">${isThermal ? 'Thermal / Struk' : 'Dokumen Biasa'}</span>
+                  ${stateBadge(p.state)}
+                </div>
+              </div>
+              <div class="printer-details">
+                <span>Status Hardware: <strong>Plug & Play (Otomatis Spooler Windows)</strong></span>
+                <span>Driver: <strong>${esc(p.driver || "—")}</strong></span>
+                ${p.ip ? `<span>IP: <strong>${esc(p.ip)}</strong></span>` : ""}
+                <span title="${esc(p.uri)}">Antrean OS: <code>${esc(p.name)}</code></span>
+              </div>
+
+              <!-- Aksi Cepat & Uji Cetak Dinamis (Plug & Play) -->
+              <div class="printer-actions" style="margin-top:10px">
+                <button class="primary" data-action="test-auto-printer" data-index="${idx}">
+                  ${ICONS.printer} Tes Cetak (${isThermal ? 'Struk Thermal' : 'Dokumen'})
+                </button>
+                ${
+                  SHOW_CLOUD_RELAY_UI
+                    ? `<button class="secondary" data-action="register-single-cloud-printer" data-printer-name="${esc(p.name)}" title="Daftarkan printer ini ke Website SIMRS agar PC lain bisa langsung mencetak ke sini">
+                  ${ICONS.cloud} Daftarkan ke Web
+                </button>`
+                    : ""
+                }
+                ${
+                  !isThermal
+                    ? `<button data-action="test-raw-printer" data-index="${idx}" title="Uji kirim byte mentah">Tes Mode RAW</button>`
+                    : `<button class="secondary" data-action="test-doc-printer" data-index="${idx}" title="Uji kirim format Windows GDI">Tes Cetak Dokumen</button>`
+                }
+                <button class="icon-btn danger" data-action="clear-printer-queue" data-index="${idx}" title="Hapus seluruh dokumen macet di printer ini">${ICONS.trash} Bersihkan Antrean</button>
+              </div>
             </div>
-          </div>
-          <div class="printer-details">
-            <span>Status Hardware: <strong>Plug & Play (Otomatis Spooler Windows)</strong></span>
-            <span>Driver: <strong>${esc(p.driver || "—")}</strong></span>
-            ${p.ip ? `<span>IP: <strong>${esc(p.ip)}</strong></span>` : ""}
-            <span title="${esc(p.uri)}">Antrean OS: <code>${esc(p.name)}</code></span>
-          </div>
+          `;
+        })
+        .join("");
 
-          <!-- Aksi Cepat & Uji Cetak Dinamis (Plug & Play) -->
-          <div class="printer-actions" style="margin-top:10px">
-            <button class="primary" data-action="test-auto-printer" data-index="${idx}">
-              ${ICONS.printer} Tes Cetak (${isThermal ? 'Struk Thermal' : 'Dokumen'})
-            </button>
-            ${
-              !isThermal
-                ? `<button data-action="test-raw-printer" data-index="${idx}" title="Uji kirim byte mentah">Tes Mode RAW</button>`
-                : `<button class="secondary" data-action="test-doc-printer" data-index="${idx}" title="Uji kirim format Windows GDI">Tes Cetak Dokumen</button>`
-            }
-            <button class="icon-btn danger" data-action="clear-printer-queue" data-index="${idx}" title="Hapus seluruh dokumen macet di printer ini">${ICONS.trash} Bersihkan Antrean</button>
-          </div>
+  const offlineHTML = offlineList.length > 0
+    ? `
+      <details class="offline-printers-section" style="margin-top:20px;border:1px dashed var(--border);border-radius:8px;padding:12px;background:rgba(0,0,0,0.01)">
+        <summary style="cursor:pointer;font-weight:600;font-size:0.88rem;color:var(--muted);display:flex;align-items:center;justify-content:space-between">
+          <span>⏸️ Printer Terpasang Lainnya / Sedang Offline (${offlineList.length})</span>
+          <span style="font-size:0.75rem;font-weight:normal;opacity:0.8">Beda jaringan atau printer mati (Klik untuk melihat)</span>
+        </summary>
+        <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
+          ${offlineList
+            .map((p) => `
+              <div class="printer-card" style="opacity:0.85;border-color:var(--border)" data-printer-name="${esc(p.name)}">
+                <div class="printer-card-header">
+                  <div class="printer-name-group">
+                    <span class="printer-name">${esc(p.name)}</span>
+                    ${connBadge(p)}
+                    ${stateBadge(p.state)}
+                  </div>
+                </div>
+                <div class="printer-details">
+                  <span>Status: <strong style="color:var(--err)">${esc(p.status_detail || (p.ip ? `Tidak terhubung di jaringan ini (${p.ip})` : 'Offline di OS'))}</strong></span>
+                  <span>Driver: <strong>${esc(p.driver || "—")}</strong></span>
+                  ${p.ip ? `<span>IP: <strong>${esc(p.ip)}</strong></span>` : ""}
+                  <span title="${esc(p.uri)}">Antrean OS: <code>${esc(p.name)}</code></span>
+                </div>
+                <div class="printer-actions" style="margin-top:8px">
+                  <button class="warning" data-action="remove-os-printer" data-printer-name="${esc(p.name)}" title="Hapus antrean printer ini dari sistem operasi Windows">
+                    ${ICONS.trash} Lepas dari Komputer
+                  </button>
+                </div>
+              </div>
+            `)
+            .join("")}
         </div>
-      `;
-    })
-    .join("");
+      </details>
+    `
+    : "";
+
+  listEl.innerHTML = readyHTML + offlineHTML;
 }
 
 function loadNetworkPrinters(force = false) {
@@ -543,7 +601,7 @@ function renderSettings() {
   const st = state.settings;
   if (!$("#listen-host")) return;
   if (cfg) {
-    $("#listen-host").value = cfg.listen_host || "127.0.0.1";
+    $("#listen-host").value = cfg.listen_host || "0.0.0.0";
     $("#listen-port").value = String(cfg.listen_port || 17891);
   }
   if (st) {
@@ -560,10 +618,31 @@ function renderSettings() {
   if (ver && cfg) ver.textContent = cfg.version || "—";
 }
 
+function renderCloudRelay() {
+  const cfg = state.config;
+  if (!$("#cloud-server-url")) return;
+  if (cfg) {
+    const isEnabled = !!cfg.cloud_agent_enabled;
+    $("#cloud-agent-enabled").checked = isEnabled;
+    $("#cloud-server-url").value = cfg.cloud_server_url || "http://localhost:8081";
+    $("#cloud-poll-interval").value = String(cfg.cloud_poll_interval_sec || 2);
+    const badge = $("#cloud-status-badge");
+    if (badge) {
+      if (isEnabled) {
+        const idInfo = cfg.cloud_agent_id ? ` (Agent ID: ${cfg.cloud_agent_id.substring(0, 8)}…)` : "";
+        badge.innerHTML = `<span class="badge badge-ready">🟢 Aktif & Terhubung ke Website${idInfo}</span>`;
+      } else {
+        badge.innerHTML = `<span class="badge badge-disabled">Nonaktif</span>`;
+      }
+    }
+  }
+}
+
 function renderAll() {
   renderStatus();
   renderOrigins();
   renderSettings();
+  renderCloudRelay();
 }
 
 // ------------------------------------------------------------------- banner
@@ -776,6 +855,70 @@ async function doSetAutostart() {
   }
 }
 
+async function doSaveCloudConfig(btn) {
+  const enabled = $("#cloud-agent-enabled")?.checked ?? false;
+  const url = ($("#cloud-server-url")?.value || "").trim();
+  const interval = parseInt($("#cloud-poll-interval")?.value || "2", 10) || 2;
+  if (enabled && !url) {
+    showBanner("#cloud-banner", "URL Server Web SIMRS wajib diisi bila Cloud Relay aktif.", false);
+    return;
+  }
+  hideBanner("#cloud-banner");
+  withBusy(btn, async () => {
+    try {
+      await SetCloudAgent(enabled, url, interval, true);
+      state.config = await GetConfig();
+      state.service = await GetState();
+      renderAll();
+      showBanner("#cloud-banner", "Pengaturan Cloud Relay berhasil disimpan & layanan diperbarui.", true);
+    } catch (err) {
+      showBanner("#cloud-banner", errorMessage(err), false);
+    }
+  });
+}
+
+async function doRegisterCloudPrinters(btn) {
+  hideBanner("#cloud-banner");
+  withBusy(btn, async () => {
+    try {
+      const count = await RegisterPrintersToCloud();
+      showBanner("#cloud-banner", `Berhasil mendaftarkan ${count} printer lokal ke server web!`, true);
+    } catch (err) {
+      showBanner("#cloud-banner", errorMessage(err), false);
+    }
+  });
+}
+
+async function doRegisterSingleCloudPrinter(btn) {
+  const printerName = btn.dataset.printerName;
+  const cfg = state.config;
+  const baseURL = (cfg?.cloud_server_url || "").replace(/\/+$/, "");
+  if (!baseURL) {
+    showBanner("#printer-banner", "URL Server Web belum diatur. Atur di tab Cloud Relay terlebih dahulu.", false);
+    return;
+  }
+  withBusy(btn, async () => {
+    try {
+      const res = await fetch(`${baseURL}/agent/printing/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: printerName,
+          queue_name: printerName,
+          connection_type: "usb",
+          platform: "windows",
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`Server web mengembalikan HTTP ${res.status}`);
+      }
+      showBanner("#printer-banner", `Printer '${printerName}' berhasil didaftarkan ke Web SIMRS!`, true);
+    } catch (err) {
+      showBanner("#printer-banner", `Gagal mendaftarkan printer: ${errorMessage(err)}`, false);
+    }
+  });
+}
+
 // ------------------------------------------------------------------ event
 
 function bindEvents() {
@@ -833,6 +976,15 @@ function bindEvents() {
         break;
       case "save-listen":
         doSaveListen();
+        break;
+      case "save-cloud-config":
+        doSaveCloudConfig(btn);
+        break;
+      case "register-cloud-printers":
+        doRegisterCloudPrinters(btn);
+        break;
+      case "register-single-cloud-printer":
+        doRegisterSingleCloudPrinter(btn);
         break;
       case "save-settings":
         doSaveSettings();
@@ -957,6 +1109,37 @@ function bindEvents() {
           showBanner(
             "#network-printer-banner",
             `Gagal melepas printer "${targetName}" dari OS: ${errorMessage(err)}`,
+            false
+          );
+          btn.disabled = false;
+          btn.innerHTML = oldHTML;
+        }
+        break;
+      }
+      case "remove-os-printer": {
+        const printerName = (btn.dataset.printerName || "").trim();
+        if (!printerName) break;
+        if (!confirm(`Apakah Anda yakin ingin melepas printer "${printerName}" dari sistem operasi?`)) {
+          break;
+        }
+        const oldHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `${ICONS.trash} Melepaskan…`;
+        hideBanner("#printer-banner");
+        try {
+          if (typeof RemoveNetworkPrinter === "function") {
+            await RemoveNetworkPrinter(printerName);
+            showBanner(
+              "#printer-banner",
+              `Printer "${printerName}" berhasil dilepas dari antrean sistem operasi (OS).`,
+              true
+            );
+            await loadPrinters(true);
+          }
+        } catch (err) {
+          showBanner(
+            "#printer-banner",
+            `Gagal melepas printer "${printerName}" dari OS: ${errorMessage(err)}`,
             false
           );
           btn.disabled = false;
@@ -1264,6 +1447,7 @@ function renderMainShell() {
     <div class="tabs" id="tabs">
       <button data-tab="beranda" class="active">Beranda</button>
       <button data-tab="printers">Printer</button>
+      ${SHOW_CLOUD_RELAY_UI ? `<button data-tab="cloud">🌐 Cloud Relay</button>` : ""}
       <button data-tab="origin">Alamat Diizinkan</button>
       <button data-tab="settings">Pengaturan</button>
       <button data-tab="log">Log</button>
@@ -1279,6 +1463,7 @@ function renderMainShell() {
           <div class="kv"><span class="k">Aktif selama</span><span class="v" id="bd-uptime">—</span></div>
           <div class="kv"><span class="k">Printer terdeteksi</span><span class="v" id="bd-printers">Memuat…</span></div>
           <div class="kv"><span class="k">File konfigurasi</span><span class="v" id="bd-path">…</span></div>
+          ${SHOW_CLOUD_RELAY_UI ? `<div class="kv"><span class="k">Cloud Relay Web</span><span class="v" id="bd-cloud-status">…</span></div>` : ""}
           <div class="banner" id="service-error" role="alert"></div>
         </div>
         <div class="card">
@@ -1345,6 +1530,63 @@ function renderMainShell() {
           </div>
         </div>
       </div>
+
+      ${
+        SHOW_CLOUD_RELAY_UI
+          ? `<div class="tab-pane" id="pane-cloud">
+        <div class="card">
+          <div class="section-heading">
+            <h2>Centralized Cloud Print Relay</h2>
+            <div id="cloud-status-badge"></div>
+          </div>
+          <p class="muted">
+            Memungkinkan komputer lain di luar jaringan (PC B, C, D) mencetak ke printer USB komputer ini melalui website SIMRS tanpa perlu instal driver apapun atau berada di 1 Wi-Fi yang sama.
+          </p>
+          <div class="banner" id="cloud-banner" style="margin-top:10px"></div>
+          <div style="margin-top:16px">
+            <label class="check" style="margin-bottom:12px">
+              <input type="checkbox" id="cloud-agent-enabled" />
+              <div>
+                <div class="check-label">Aktifkan Cloud Print Relay</div>
+                <div class="check-desc">Komputer ini akan mendengarkan antrean tugas cetak dari website pusat secara terus-menerus.</div>
+              </div>
+            </label>
+
+            <div style="margin-top:12px">
+              <label style="font-weight:600;font-size:0.88rem;display:block;margin-bottom:4px">Alamat Server Website SIMRS</label>
+              <div class="row grow">
+                <input id="cloud-server-url" placeholder="http://192.168.1.100:8081 atau https://simrs.klinik.com" aria-label="URL Server Web" />
+                <button class="primary" data-action="save-cloud-config">Simpan & Terapkan</button>
+              </div>
+              <p class="muted" style="margin-top:6px;font-size:0.8rem">
+                Masukkan URL backend server website SIMRS tempat antrean cetak dikirim oleh PC lain.
+              </p>
+            </div>
+
+            <div style="margin-top:16px">
+              <label style="font-weight:600;font-size:0.88rem;display:block;margin-bottom:4px">Interval Cek Antrean (Detik)</label>
+              <div class="row">
+                <input id="cloud-poll-interval" type="number" min="1" max="60" value="2" style="width:100px" aria-label="Interval Polling" />
+                <span class="muted" style="align-self:center">detik (bawaan: 2 detik)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Registrasi Seluruh Printer ke Website</h2>
+          <p class="muted">
+            Daftarkan semua printer USB / lokal yang terhubung di PC ini ke website SIMRS, sehingga PC lain dapat langsung memilih printer ini saat mencetak dokumen dari browser.
+          </p>
+          <div class="row" style="margin-top:12px">
+            <button class="primary" data-action="register-cloud-printers">
+              ${ICONS.cloud} Daftarkan Seluruh Printer ke Website Sekarang
+            </button>
+          </div>
+        </div>
+      </div>`
+          : ""
+      }
 
       <div class="tab-pane" id="pane-origin">
         <div class="card">

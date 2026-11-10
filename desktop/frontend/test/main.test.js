@@ -116,4 +116,6 @@ test("daftar printer terdeteksi tampil pada panel printer", async () => {
   assert.match(node("#printer-list").innerHTML, /Network Laser/);
   assert.match(node("#printer-list").innerHTML, /badge-usb/);
   assert.match(node("#printer-list").innerHTML, /badge-network/);
+  assert.doesNotMatch(node("#app").innerHTML, /data-tab="cloud"/);
+  assert.doesNotMatch(node("#printer-list").innerHTML, /register-single-cloud-printer/);
 });

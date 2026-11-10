@@ -26,6 +26,7 @@ func TestDetermineConnectionType(t *testing.T) {
 		{"WSD-xyz", "Canon TS5300", "", "network"},
 		{"FILE:", "Microsoft Print to PDF", "", "virtual"},
 		{"PORTPROMPT:", "Microsoft XPS Document Writer", "", "virtual"},
+		{`\\.\pipe\PDFPrint`, "PDF24", "", "virtual"},
 		{"LPT1", "Old DotMatrix", "", "serial"},
 	}
 

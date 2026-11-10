@@ -3,7 +3,9 @@ package printserver
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
@@ -362,10 +364,16 @@ func discoverSubnetPrinters(ctx context.Context) map[string]discoveredPrinter {
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			printer := probeSubnetPrinter(ctx, targetIP)
-			if printer != nil {
+			printers := probeSubnetAll(ctx, targetIP)
+			if len(printers) > 0 {
 				mu.Lock()
-				results[printer.IP] = *printer
+				for _, p := range printers {
+					key := p.URI
+					if key == "" {
+						key = p.IP
+					}
+					results[key] = p
+				}
 				mu.Unlock()
 			}
 		}(ip)
@@ -431,6 +439,53 @@ func isPrivateIPv4(ip net.IP) bool {
 	return ip[0] == 10 ||
 		(ip[0] == 172 && ip[1] >= 16 && ip[1] <= 31) ||
 		(ip[0] == 192 && ip[1] == 168)
+}
+
+// probeSubnetAll memindai IP target baik untuk printer fisik (port 631 / 9100)
+// maupun PC Rekan yang menjalankan RSISA Printer Server (port 17891) secara otomatis.
+func probeSubnetAll(ctx context.Context, ip string) []discoveredPrinter {
+	var list []discoveredPrinter
+	dialer := net.Dialer{Timeout: 350 * time.Millisecond}
+
+	// 1. Cek apakah IP target adalah PC Rekan yang menjalankan RSISA Printer Server (port 17891)
+	if conn17891, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(ip, "17891")); err == nil {
+		_ = conn17891.Close()
+		client := &http.Client{Timeout: 1200 * time.Millisecond}
+		req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://%s:17891/printers", ip), nil)
+		if err == nil {
+			if resp, err := client.Do(req); err == nil && resp.StatusCode == 200 {
+				defer resp.Body.Close()
+				var payload struct {
+					Data []LocalPrinter `json:"data"`
+				}
+				if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&payload); err == nil {
+					for _, lp := range payload.Data {
+						low := strings.ToLower(lp.Name)
+						if strings.Contains(low, "pdf") || strings.Contains(low, "xps") || strings.Contains(low, "onenote") || strings.Contains(low, "fax") {
+							continue
+						}
+						list = append(list, discoveredPrinter{
+							Name:  fmt.Sprintf("%s (PC Rekan %s)", lp.Name, ip),
+							Model: lp.Name,
+							Host:  ip,
+							IP:    ip,
+							Port:  17891,
+							URI:   fmt.Sprintf("ipp://%s:17891/printers/%s", ip, base64.RawURLEncoding.EncodeToString([]byte(lp.Name))),
+							PDL:   []string{"application/octet-stream", "raw"},
+							State: "ready",
+						})
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Cek printer fisik port 631 (IPP) atau 9100 (RAW)
+	if p := probeSubnetPrinter(ctx, ip); p != nil {
+		list = append(list, *p)
+	}
+
+	return list
 }
 
 // probeSubnetPrinter memeriksa apakah suatu IP mengaktifkan layanan printer (port 631 IPP atau port 9100 RAW).
@@ -568,7 +623,7 @@ func fetchPrinterWebModel(ctx context.Context, ip string) string {
 func getMDNSService(services map[string]*mdnsService, name string) *mdnsService {
 	service, exists := services[name]
 	if !exists {
-		service = &mdnsService{Name: name, Text: make(map[string]string)}
+		service = &mdnsService{Name: "", Text: make(map[string]string)}
 		services[name] = service
 	}
 	return service

@@ -13,9 +13,9 @@ import (
 	"github.com/RSISA-Semarang/rsisa-print-server/internal/utils"
 )
 
-// DefaultListen adalah alamat dengarkan bawaan; hanya loopback agar tidak
-// bisa diakses dari jaringan lain.
-const DefaultListen = "127.0.0.1:17891"
+// DefaultListen adalah alamat dengarkan bawaan; 0.0.0.0 agar siap pakai di LAN
+// tanpa perlu konfigurasi manual dari user (Plug & Play Zero-Config).
+const DefaultListen = "0.0.0.0:17891"
 
 // DefaultOrigins adalah daftar origin bawaan saat print-server.json dibuat
 // pertama kali oleh aplikasi desktop.
@@ -36,6 +36,7 @@ type RouteConfig struct {
 
 type LocalPrinter struct {
 	Name           string `json:"name"`
+	QueueName      string `json:"queue_name"`
 	State          string `json:"state"`
 	IsDefault      bool   `json:"is_default"`
 	OwnerPC        string `json:"owner_pc,omitempty"`
@@ -46,6 +47,7 @@ type LocalPrinter struct {
 	URI            string `json:"uri,omitempty"`
 	ConnectionType string `json:"connection_type,omitempty"`
 	PrinterType    string `json:"printer_type,omitempty"` // "thermal" atau "document"
+	StatusDetail   string `json:"status_detail,omitempty"`
 }
 
 // IsThermalOrPOS checks if a printer name, driver, or port indicates a thermal receipt / label printer.
@@ -79,11 +81,11 @@ func DetermineConnectionType(port, driver, ip string) string {
 	if strings.HasPrefix(portUpper, "COM") || strings.HasPrefix(portUpper, "LPT") {
 		return "serial"
 	}
+	if strings.HasPrefix(portUpper, "FILE:") || strings.HasPrefix(portUpper, "PORTPROMPT:") || strings.Contains(portUpper, `\PIPE\`) || strings.Contains(driverUpper, "PDF") || strings.Contains(driverUpper, "XPS") {
+		return "virtual"
+	}
 	if ip != "" || strings.HasPrefix(portUpper, "IP_") || strings.HasPrefix(portUpper, "TCP") || strings.HasPrefix(portUpper, "WSD-") || strings.Contains(portUpper, ".") {
 		return "network"
-	}
-	if strings.HasPrefix(portUpper, "FILE:") || strings.HasPrefix(portUpper, "PORTPROMPT:") || strings.Contains(driverUpper, "PDF") || strings.Contains(driverUpper, "XPS") {
-		return "virtual"
 	}
 	if portUpper != "" {
 		return "local"
@@ -97,14 +99,24 @@ type Config struct {
 	AllowedOrigin  []string        `json:"allowed_origins"`
 	Printers       []PrinterConfig `json:"printers,omitempty"`
 	Routes         []RouteConfig   `json:"routes,omitempty"`
+
+	// Cloud Agent Mode (Centralized Cloud Print Relay)
+	CloudAgentEnabled bool   `json:"cloud_agent_enabled"`
+	CloudServerURL    string `json:"cloud_server_url"` // misal: "http://localhost:8081" atau "https://simrs.klinik.com"
+	CloudAgentID      string `json:"cloud_agent_id,omitempty"`
+	CloudAgentToken   string `json:"cloud_agent_token,omitempty"`
+	CloudPollInterval int    `json:"cloud_poll_interval_sec,omitempty"`
 }
 
 // DefaultConfig mengembalikan konfigurasi bawaan yang ditulis aplikasi desktop
 // ke print-server.json saat pertama kali jalan.
 func DefaultConfig() Config {
 	return Config{
-		Listen:        DefaultListen,
-		AllowedOrigin: append([]string(nil), DefaultOrigins...),
+		Listen:            DefaultListen,
+		AllowedOrigin:     append([]string(nil), DefaultOrigins...),
+		CloudAgentEnabled: true,
+		CloudServerURL:    "http://localhost:8081",
+		CloudPollInterval: 2,
 	}
 }
 
