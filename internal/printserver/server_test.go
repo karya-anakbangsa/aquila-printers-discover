@@ -20,7 +20,7 @@ func TestRawTCPPDFIsRejectedBeforeSending(t *testing.T) {
 	testRequest.Header.Set("Content-Type", "application/json")
 
 	for _, request := range []*http.Request{printRequest, testRequest} {
-		response, err := app.Test(request)
+		response, err := app.Test(request, -1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -36,7 +36,7 @@ func TestGetPrintersResponseStructure(t *testing.T) {
 	app := server.App()
 
 	req := httptest.NewRequest(http.MethodGet, "/printers", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}

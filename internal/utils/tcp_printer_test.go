@@ -139,6 +139,8 @@ func TestPrintTCPCancelledAfterPartialSendIsUncertain(t *testing.T) {
 	l := tcpTestListener(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	done := make(chan struct{})
+	defer close(done)
 	go func() {
 		conn, err := l.Accept()
 		if err != nil {
@@ -149,8 +151,9 @@ func TestPrintTCPCancelledAfterPartialSendIsUncertain(t *testing.T) {
 		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 		_, _ = io.ReadFull(conn, make([]byte, 1024))
 		cancel()
+		<-done
 	}()
-	pdf := append([]byte("%PDF-1.4\n"), make([]byte, 20<<20)...)
+	pdf := append([]byte("%PDF-1.4\n"), make([]byte, 32<<20)...)
 	err := PrintTCPDocument(ctx, "tcp://"+l.Addr().String(), pdf, 1, "")
 	var uncertain *TCPSubmissionError
 	if !errors.As(err, &uncertain) {

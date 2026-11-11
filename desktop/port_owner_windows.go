@@ -14,7 +14,7 @@ import (
 )
 
 func portOwnerProcesses(port int) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	// Query the TCP table first, then resolve each owning PID through the
 	// standard process cmdlet. Select-Object keeps the response limited to

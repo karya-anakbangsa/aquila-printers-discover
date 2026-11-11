@@ -93,7 +93,7 @@ func TestUSBEndpoints(t *testing.T) {
 
 	// Test POST /printers/raw empty body
 	reqRawEmpty := httptest.NewRequest("POST", "/printers/raw", bytes.NewReader(nil))
-	respRawEmpty, err := server.App().Test(reqRawEmpty)
+	respRawEmpty, err := server.App().Test(reqRawEmpty, -1)
 	if err != nil {
 		t.Fatalf("POST /printers/raw empty test failed: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestUSBEndpoints(t *testing.T) {
 	rawJSON := `{"printer":"__rsisa_test_missing_printer__","data":"test data"}`
 	reqRawNoTarget := httptest.NewRequest("POST", "/printers/raw", strings.NewReader(rawJSON))
 	reqRawNoTarget.Header.Set("Content-Type", "application/json")
-	respRawNoTarget, err := server.App().Test(reqRawNoTarget)
+	respRawNoTarget, err := server.App().Test(reqRawNoTarget, -1)
 	if err != nil {
 		t.Fatalf("POST /printers/raw no target failed: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestUSBEndpoints(t *testing.T) {
 	invalidB64 := `{"printer":"POS58","is_base64":true,"data":"not_valid_base64!!!"}`
 	reqInvalidB64 := httptest.NewRequest("POST", "/printers/raw", strings.NewReader(invalidB64))
 	reqInvalidB64.Header.Set("Content-Type", "application/json")
-	respInvalidB64, err := server.App().Test(reqInvalidB64)
+	respInvalidB64, err := server.App().Test(reqInvalidB64, -1)
 	if err != nil {
 		t.Fatalf("POST /printers/raw invalid b64 failed: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestCORSIncludesRawHeaders(t *testing.T) {
 
 	req := httptest.NewRequest("OPTIONS", "/printers/raw", nil)
 	req.Header.Set("Origin", "http://localhost:4200")
-	resp, err := server.App().Test(req)
+	resp, err := server.App().Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}

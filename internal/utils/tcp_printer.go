@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/url"
 	"strconv"
@@ -144,8 +143,22 @@ func sendTCPCopy(ctx context.Context, address string, pdf []byte) (bool, error) 
 	}
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
-	_, err = io.Copy(conn, bytes.NewReader(pdf))
-	if err != nil {
+	const chunkSize = 16 * 1024
+	for offset := 0; offset < len(pdf); {
+		if err := ctx.Err(); err != nil {
+			return true, err
+		}
+		end := offset + chunkSize
+		if end > len(pdf) {
+			end = len(pdf)
+		}
+		n, err := conn.Write(pdf[offset:end])
+		offset += n
+		if err != nil {
+			return true, err
+		}
+	}
+	if err := ctx.Err(); err != nil {
 		return true, err
 	}
 	return true, conn.Close()
