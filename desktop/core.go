@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/RSISA-Semarang/rsisa-print-server/internal/printserver"
+	"github.com/RSISA-Semarang/rsisa-print-server/internal/utils"
 )
 
 const appVersion = "2.1.0"
@@ -704,15 +705,23 @@ func (c *Core) ConfigPath() string { return c.paths.PrintServer }
 // ConfigDir mengembalikan folder konfigurasi.
 func (c *Core) ConfigDir() string { return c.paths.Dir }
 
+const firewallRuleName = "RSISA Printer Server Port 17891"
+
+func firewallRuleCommands() (checkCmd *exec.Cmd, addCmd *exec.Cmd) {
+	ruleArg := "name=" + firewallRuleName
+	checkCmd = utils.HiddenCommand(context.Background(), "netsh", "advfirewall", "firewall", "show", "rule", ruleArg)
+	addCmd = utils.HiddenCommand(context.Background(), "netsh", "advfirewall", "firewall", "add", "rule", ruleArg, "dir=in", "action=allow", "protocol=TCP", "localport=17891", "profile=any")
+	return checkCmd, addCmd
+}
+
 func ensureWindowsFirewall(logger func(level, msg string)) {
 	if runtime.GOOS != "windows" {
 		return
 	}
 	go func() {
-		checkCmd := exec.Command("netsh", "advfirewall", "firewall", "show", "rule", "name=RSISA Printer Server Port 17891")
+		checkCmd, addCmd := firewallRuleCommands()
 		if err := checkCmd.Run(); err != nil {
-			addCmd := exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name=RSISA Printer Server Port 17891", "dir=in", "action=allow", "protocol=TCP", "localport=17891", "profile=any")
-			if err := addCmd.Run(); err == nil {
+			if err := addCmd.Run(); err == nil && logger != nil {
 				logger("INFO", "Aturan Windows Firewall untuk port 17891 berhasil ditambahkan secara otomatis")
 			}
 		}

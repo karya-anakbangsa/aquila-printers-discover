@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/RSISA-Semarang/rsisa-print-server/internal/utils"
 )
 
 const (
@@ -383,6 +385,10 @@ func discoverSubnetPrinters(ctx context.Context) map[string]discoveredPrinter {
 	return results
 }
 
+func arpCacheCommand(ctx context.Context) *exec.Cmd {
+	return utils.HiddenCommand(ctx, "arp", "-a")
+}
+
 // getCandidateIPs mengumpulkan IP-IP perangkat aktif di jaringan lokal dari tabel ARP sistem.
 func getCandidateIPs(ctx context.Context) []string {
 	seen := make(map[string]bool)
@@ -403,7 +409,7 @@ func getCandidateIPs(ctx context.Context) []string {
 	}
 
 	// Eksekusi arp -a untuk mengambil cache ARP sistem operasi
-	cmd := exec.CommandContext(ctx, "arp", "-a")
+	cmd := arpCacheCommand(ctx)
 	output, err := cmd.Output()
 	if err == nil {
 		ipRe := regexp.MustCompile(`\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`)

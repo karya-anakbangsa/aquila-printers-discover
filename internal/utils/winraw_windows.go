@@ -253,12 +253,16 @@ func ClearWindowsPrintQueue(ctx context.Context, printerName string) error {
 	log.Printf("[PRINTER QUEUE] Antrean cetak untuk '%s' berhasil dibersihkan", printerName)
 	return nil
 }
+func serialPortsRegistryCommand(ctx context.Context) *exec.Cmd {
+	return HiddenCommand(ctx, "reg", "query", `HKLM\HARDWARE\DEVICEMAP\SERIALCOMM`)
+}
+
 func ListSerialPorts() []string {
 	var ports []string
 	seen := make(map[string]bool)
 
 	// Method 1: Check Windows registry for registered COM ports
-	cmd := exec.Command("reg", "query", `HKLM\HARDWARE\DEVICEMAP\SERIALCOMM`)
+	cmd := serialPortsRegistryCommand(context.Background())
 	out, err := cmd.Output()
 	if err == nil {
 		re := regexp.MustCompile(`(?i)REG_SZ\s+(COM\d+)`)
