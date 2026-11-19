@@ -24,6 +24,7 @@ $heightMM = [double]::Parse($env:RSISA_TEST_HEIGHT, [System.Globalization.Cultur
 $doc = [System.Drawing.Printing.PrintDocument]::new()
 $doc.PrinterSettings.PrinterName = $env:RSISA_PRINTER_NAME
 if (-not $doc.PrinterSettings.IsValid) { throw 'Printer tidak ditemukan pada Windows' }
+` + windowsHighPrintQuality + `
 $doc.DefaultPageSettings.PaperSize = [System.Drawing.Printing.PaperSize]::new('RSISA Test', [int][math]::Round($widthMM * 100 / 25.4), [int][math]::Round($heightMM * 100 / 25.4))
 $doc.DefaultPageSettings.Color = ($env:RSISA_TEST_MODE -eq 'color')
 $doc.add_PrintPage({

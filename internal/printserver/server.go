@@ -962,7 +962,7 @@ func printPDFToCUPS(ctx context.Context, printerName string, pdf []byte, jobName
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("simpan dokumen cetak: %w", err)
 	}
-	args := []string{"-d", printerName, "-t", jobName, "-n", strconv.Itoa(copies), "-o", "job-sheets=none"}
+	args := []string{"-d", printerName, "-t", jobName, "-n", strconv.Itoa(copies), "-o", "job-sheets=none", "-o", "print-quality=5"}
 	if media != "" {
 		args = append(args, "-o", "media="+media)
 	}

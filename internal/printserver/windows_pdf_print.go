@@ -37,12 +37,18 @@ func printPDFToWindowsQueue(ctx context.Context, printerName string, pdf []byte,
 	return nil
 }
 
+const windowsHighPrintQuality = `
+$highResolution = $doc.PrinterSettings.PrinterResolutions | Where-Object { $_.Kind -eq [System.Drawing.Printing.PrinterResolutionKind]::High } | Select-Object -First 1
+if ($highResolution) { $doc.DefaultPageSettings.PrinterResolution = $highResolution }
+`
+
 const windowsPDFPrintScript = `$ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $null = [Windows.Storage.StorageFile, Windows.Storage, ContentType=WindowsRuntime]
 $null = [Windows.Data.Pdf.PdfDocument, Windows.Data.Pdf, ContentType=WindowsRuntime]
 $null = [Windows.Data.Pdf.PdfPageRenderOptions, Windows.Data.Pdf, ContentType=WindowsRuntime]
+$null = [Windows.Graphics.Imaging.BitmapEncoder, Windows.Graphics.Imaging, ContentType=WindowsRuntime]
 $null = [Windows.Storage.Streams.InMemoryRandomAccessStream, Windows.Storage, ContentType=WindowsRuntime]
 $asTaskGeneric = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
   $_.Name -eq 'AsTask' -and $_.IsGenericMethod -and $_.GetGenericArguments().Count -eq 1 -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name.StartsWith('IAsyncOperation')
@@ -67,6 +73,7 @@ if ($pdf.PageCount -lt 1) { throw 'PDF tidak memiliki halaman' }
 $doc = [System.Drawing.Printing.PrintDocument]::new()
 $doc.PrinterSettings.PrinterName = $env:AQUILA_PRINTER_NAME
 if (-not $doc.PrinterSettings.IsValid) { throw 'Antrean printer Windows tidak ditemukan' }
+` + windowsHighPrintQuality + `
 $doc.PrinterSettings.Copies = [int16]::Parse($env:AQUILA_COPIES)
 $doc.DocumentName = $env:AQUILA_PRINT_JOB
 $doc.PrintController = [System.Drawing.Printing.StandardPrintController]::new()
@@ -103,19 +110,25 @@ $doc.add_PrintPage({
   $bitmap = $null
   $imageStream = $null
   try {
+    $bounds = $e.PageBounds
+    $scale = [math]::Min($bounds.Width / $page.Size.Width, $bounds.Height / $page.Size.Height)
+    $width = [single]($page.Size.Width * $scale)
+    $height = [single]($page.Size.Height * $scale)
+    $driverDpi = [math]::Max($e.Graphics.DpiX, $e.Graphics.DpiY)
+    if ($driverDpi -le 0) { $driverDpi = 300 }
+    # shortcut: full-page bitmaps are capped to bound memory; tile the render for higher resolutions.
+    $pixelScale = [math]::Min([math]::Min($driverDpi, 600) / 100, [math]::Sqrt(36000000.0 / ($width * $height)))
     $options = [Windows.Data.Pdf.PdfPageRenderOptions]::new()
-    $options.DestinationWidth = [uint32][math]::Max(1, [math]::Ceiling($page.Size.Width * 300 / 96))
-    $options.DestinationHeight = [uint32][math]::Max(1, [math]::Ceiling($page.Size.Height * 300 / 96))
+    $options.BitmapEncoderId = [Windows.Graphics.Imaging.BitmapEncoder]::PngEncoderId
+    $options.DestinationWidth = [uint32][math]::Max(1, [math]::Floor($width * $pixelScale))
+    $options.DestinationHeight = [uint32][math]::Max(1, [math]::Floor($height * $pixelScale))
     Wait-WinRT ($page.RenderToStreamAsync($randomStream, $options))
     $randomStream.Seek(0)
     $imageStream = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($randomStream)
     $bitmap = [System.Drawing.Image]::FromStream($imageStream)
-    $bounds = $e.PageBounds
-    $scale = [math]::Min($bounds.Width / [double]$bitmap.Width, $bounds.Height / [double]$bitmap.Height)
-    $width = [single]($bitmap.Width * $scale)
-    $height = [single]($bitmap.Height * $scale)
     $x = [single]($bounds.X + ($bounds.Width - $width) / 2)
     $y = [single]($bounds.Y + ($bounds.Height - $height) / 2)
+    $e.Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
     $e.Graphics.DrawImage($bitmap, $x, $y, $width, $height)
     $state.Index++
     $e.HasMorePages = $state.Index -lt $pdf.PageCount

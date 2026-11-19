@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -35,6 +37,7 @@ const (
 	ippTagKeyword                    byte   = 0x44
 	ippTagInteger                    byte   = 0x21
 	ippTagEnum                       byte   = 0x23
+	ippPrintQualityHigh                     = 5
 )
 
 var ippRequestID atomic.Uint32
@@ -47,6 +50,7 @@ type IPPPrinterCapabilities struct {
 	PDFSupported    bool     `json:"pdf_supported"`
 	DocumentFormats []string `json:"document_formats"`
 	MediaSupported  []string `json:"media_supported"`
+	highQuality     bool
 }
 
 type IPPSubmissionError struct{ Err error }
@@ -67,7 +71,7 @@ func InspectIPPPrinter(ctx context.Context, printerURI string) (IPPPrinterCapabi
 		request = appendIPPAttribute(request, ippTagCharset, "attributes-charset", "utf-8")
 		request = appendIPPAttribute(request, ippTagNaturalLanguage, "attributes-natural-language", "en")
 		request = appendIPPAttribute(request, ippTagURI, "printer-uri", parsed.String())
-		request = appendIPPAttributeValues(request, ippTagKeyword, "requested-attributes", "printer-name", "printer-make-and-model", "printer-state", "document-format-supported", "media-supported")
+		request = appendIPPAttributeValues(request, ippTagKeyword, "requested-attributes", "printer-name", "printer-make-and-model", "printer-state", "document-format-supported", "media-supported", "print-quality-supported")
 		return append(request, ippTagEnd)
 	}
 	requestID := ippRequestID.Add(1)
@@ -99,6 +103,7 @@ func InspectIPPPrinter(ctx context.Context, printerURI string) (IPPPrinterCapabi
 	result.State = ippPrinterState(firstIPPValue(attrs, "printer-state"))
 	result.DocumentFormats = attrs["document-format-supported"]
 	result.MediaSupported = attrs["media-supported"]
+	result.highQuality = slices.Contains(attrs["print-quality-supported"], strconv.Itoa(ippPrintQualityHigh))
 	for _, format := range result.DocumentFormats {
 		if strings.EqualFold(format, "application/pdf") {
 			result.PDFSupported = true
@@ -149,7 +154,10 @@ func PrintIPPDocument(ctx context.Context, printerURI string, pdf []byte, jobNam
 		request = appendIPPAttribute(request, ippTagNameWithoutLanguage, "job-name", jobName)
 		request = appendIPPAttribute(request, ippTagMimeMediaType, "document-format", "application/pdf")
 		request = append(request, ippTagJobAttributes)
-		request = appendIPPIntegerAttribute(request, "copies", copies)
+		request = appendIPPNumericAttribute(request, ippTagInteger, "copies", copies)
+		if caps.highQuality {
+			request = appendIPPNumericAttribute(request, ippTagEnum, "print-quality", ippPrintQualityHigh)
+		}
 		if media != "" {
 			request = appendIPPAttribute(request, ippTagKeyword, "media", media)
 		}
@@ -280,15 +288,10 @@ func appendIPPAttributeValues(buffer []byte, tag byte, name string, values ...st
 	return buffer
 }
 
-func appendIPPIntegerAttribute(buffer []byte, name string, value int) []byte {
-	buffer = append(buffer, ippTagInteger)
-	nameBytes := []byte(name)
-	buffer = append(buffer, byte(len(nameBytes)>>8), byte(len(nameBytes)))
-	buffer = append(buffer, nameBytes...)
-	buffer = append(buffer, 0, 4)
+func appendIPPNumericAttribute(buffer []byte, tag byte, name string, value int) []byte {
 	var intBytes [4]byte
 	binary.BigEndian.PutUint32(intBytes[:], uint32(value))
-	return append(buffer, intBytes[:]...)
+	return appendIPPAttribute(buffer, tag, name, string(intBytes[:]))
 }
 
 func appendIPPBytes(buffer, value []byte) []byte {

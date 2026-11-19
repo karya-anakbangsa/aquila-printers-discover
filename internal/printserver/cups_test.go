@@ -59,7 +59,7 @@ func TestPrintPDFToCUPSUsesLocalQueue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(args), "-d\nEPSON_L5190_Series\n-t\nBilling\n-n\n2\n-o\njob-sheets=none\n-o\nmedia=A4\n") {
+	if !strings.HasPrefix(string(args), "-d\nEPSON_L5190_Series\n-t\nBilling\n-n\n2\n-o\njob-sheets=none\n-o\nprint-quality=5\n-o\nmedia=A4\n") {
 		t.Fatalf("unexpected lp arguments: %q", args)
 	}
 	body, err := os.ReadFile(bodyFile)
